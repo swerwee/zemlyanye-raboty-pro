@@ -64,6 +64,15 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 .pickrow select#in-variant { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) }
 .vinfo { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; padding-bottom: 4px }
 .vinfo b { font-weight: 600 } .vinfo span { color: var(--muted) }
+ul.checks { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px }
+ul.checks li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 6px; font-size: 14px }
+ul.checks li span { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700 }
+ul.checks li.ok span { background: var(--ok-bg); color: var(--ok) } ul.checks li.fail span { background: var(--err-bg); color: var(--err) }
+ul.checks li.warn span { background: var(--warn-bg); color: var(--warn) } ul.checks li.miss span { background: var(--soft); color: var(--muted) }
+.dl { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; margin-top: 16px; padding: 14px 16px; border-radius: 10px; background: var(--accent-soft) }
+.dl > div:first-child { display: flex; flex-direction: column; min-width: 0; flex: 1 1 280px } .dl span { font-size: 13px; color: var(--muted) }
+.dl-b { display: flex; gap: 8px; flex-wrap: wrap }
+section.final .roman { background: var(--ink); color: var(--panel) }
 .duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
 .exc { border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
 .exc.best { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) }
@@ -623,7 +632,7 @@ function excSteps(R, E) {
     <li><div>Нвыр = 100·T/Нвр = 800/${fx(p.nv.v, 4)} = <span class="res">${fx(p.Nvyr, 1)} м³/смену</span><span class="eq">1,5·Нвыр = ${fx(p.lim, 1)} м³/смену</span></div></li>
     ${E.ok ? `<li><div>1,5·Нвыр &gt; Пэ ≥ Нвыр: ${fx(p.lim, 1)} &gt; ${fx(p.P, 1)} ≥ ${fx(p.Nvyr, 1)} — <b>${p.cond ? "выполняется" : "не выполняется"}</b></div></li>` : ""}
     ${Number.isFinite(E.Nsm) ? `<li><div>Nсм = Vкотл/Пэ = ${fx(R.I.V, 2)}/${fx(p.P, 1)} = <span class="res">${fx(E.Nsm, 2)} смены</span>${Number.isFinite(E.Ndn) ? `<span class="eq">Nдн = Nсм/n = ${fx(E.Nsm, 2)}/${cm(st.nsh.v)} = <b>${fx(E.Ndn, 2)} дня</b></span>` : ""}</div></li>` : ""}
-    ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 2)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
+    ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 4)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
   </ol>${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}`;
 }
 function partII(R) {
@@ -690,6 +699,221 @@ function partIII(R) {
     ${body}${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}</section>`;
 }
 
+
+/* ===================== ИТОГОВАЯ ПРОВЕРКА И ОТЧЁТ ===================== */
+function verdict(R) {
+  const st = R.st, A = R.E.a, B = R.E.b, III = R.III, checks = [];
+  const add = (ok, text, level = "fail") => checks.push({ ok, text, level: ok ? "ok" : level });
+  const complete = !!(R.I.ok && A.ok && B.ok && R.best && III.ok);
+  add(!!R.I.ok, "Объём котлована рассчитан, крутизна откоса m взята по Таблице 1", "miss");
+  add(A.ok && B.ok, "Рассчитаны два экскаватора (задание раздела II)", "miss");
+  add(!!III.ok, "Рассчитано количество автосамосвалов (раздел III)", "miss");
+  const exs = [A, B].filter(E => E.ok);
+  if (exs.length) {
+    const inRange = (k, r) => st[k].ok && st[k].v >= r[0] - EPS && st[k].v <= r[1] + EPS;
+    add(R.soil && inRange("Kn", R.soil.kn) && inRange("Kr", R.soil.kr), `Kн и Kр в диапазонах Таблицы 3 (${fx(R.soil ? R.soil.kn[0] : NaN)}–${fx(R.soil ? R.soil.kn[1] : NaN)} и ${fx(R.soil ? R.soil.kr[0] : NaN)}–${fx(R.soil ? R.soil.kr[1] : NaN)})`);
+    add(inRange("Kv", RANGES.Kv), "Kв в диапазоне методички 0,7–0,9");
+    add(exs.every(E => E.recOk !== false), "Ёмкость ковшей соответствует Таблице 2 для объёма котлована");
+    add(exs.every(E => E.p.tc.kind !== "extrap" && E.p.nv.kind !== "extrap"), "Тц и Нвр взяты из таблиц или интерполяцией, без выхода за таблицы");
+    add(exs.every(E => E.name), "Указаны марки обоих экскаваторов (нужны для вывода)", "warn");
+  }
+  if (R.best) add(R.best.p.cond, `Условие 1,5·Нвыр > Пэ ≥ Нвыр для принятого экскаватора (${R.best.title})`);
+  if (III.ok) {
+    add(III.pickOk, `Загрузка самосвала в допусках: недогруз не более 10 %, перегруз не более 5 % (принято n = ${III.n}, ${fx(III.load * 100, 1)} %)`);
+    const inR = (k) => st[k].ok && st[k].v >= RANGES[k][0] - EPS && st[k].v <= RANGES[k][1] + EPS;
+    add(inR("vg") && inR("vp") && inR("tr") && inR("tm"), "Vг, Vп, tр, tм в диапазонах методички");
+  }
+  const fails = checks.filter(c => c.level === "fail"), miss = checks.filter(c => c.level === "miss"), warns = checks.filter(c => c.level === "warn");
+  let status, text;
+  if (!complete) { status = "miss"; text = "Расчёт ещё не закончен — заполните недостающие данные."; }
+  else if (!fails.length) { status = "ok"; text = warns.length ? "Расчёт выполнен правильно: все условия методички соблюдены. Осталось оформить мелочи из списка." : "Расчёт выполнен правильно: все условия методички соблюдены."; }
+  else { status = "fail"; text = `Расчёт выполнен полностью, но ${fails.length === 1 ? "одно условие методички не выполняется" : `не выполняются условия методички: ${fails.length}`}. Расчёт можно скачать — замечания будут указаны в файле; согласуйте их с преподавателем.`; }
+  return { complete, checks, status, text };
+}
+
+function reportModel(R) {
+  const st = R.st, I = R.I, v = curVar(), out = [];
+  const P = t => out.push({ t: "p", text: t }), Q = t => out.push({ t: "eq", text: t }), H = (t, l = 2) => out.push({ t: "h", text: t, l }), T = rows => out.push({ t: "table", rows });
+  const n = (x, d = 3) => fx(x, d);
+  const interpLine = (r, name, q, unit, tab) => {
+    if (r.kind === "table") return `${name} = ${n(r.v, 4)} ${unit} (${tab}, q = ${n(r.seg[0][0], 3)} м³)`;
+    if (r.hold) return `${name} = ${n(r.v, 4)} ${unit} (q вне ${tab.replace("Таблица", "Таблицы")} — принято крайнее значение при q = ${n(r.seg[0][0], 3)} м³)`;
+    const [[x1, y1], [x2, y2]] = r.seg;
+    return `${name} = ${name}1 + (${name}2 - ${name}1)·(q - q1)/(q2 - q1) = ${n(y1, 4)} + (${n(y2, 4)} - ${n(y1, 4)})·(${n(q, 3)} - ${n(x1, 3)})/(${n(x2, 3)} - ${n(x1, 3)}) = ${n(r.v, 4)} ${unit} (${r.kind === "extrap" ? "экстраполяция за пределы" : "интерполяция по"} ${tab.replace("Таблица", "Таблице")})`;
+  };
+  out.push({ t: "title", text: "Расчёт курсовой работы «Технология производства земляных работ»" });
+  P(v ? `Группа ${S.group}, вариант В.${+S.variant + 1} - ${v.short}.` : "Исходные данные введены вручную.");
+  H("Исходные данные");
+  T([["Параметр", "Значение"],
+    ["Грунт (Таблица 3)", R.soil ? `${R.soil.name}, ${R.soil.group} группа` : "—"],
+    ["Средняя плотность грунта ρ", R.soil ? `${n(R.soil.rho, 0)} кг/м³` : "—"],
+    ["Размеры котлована по дну c × d", st.c.ok && st.d.ok ? `${n(st.c.v)} × ${n(st.d.v)} м` : "—"],
+    ["Глубина котлована H", st.H.ok ? `${n(st.H.v)} м` : "—"],
+    ["Угол поворота стрелы", `${S.angle}°`],
+    ["Средняя дальность возки Lср", st.L.ok ? `${n(st.L.v)} км` : "—"],
+    ["Kн / Kр / Kв", [st.Kn, st.Kr, st.Kv].map(x => x.ok ? n(x.v) : "—").join(" / ")],
+    ["Продолжительность смены T; смен в сутки n", `8 ч; ${st.nsh.ok ? n(st.nsh.v, 0) : "—"}`],
+    ["Самосвал: Vг / Vп, км/ч; tр / tм, мин", `${[st.vg, st.vp].map(x => x.ok ? n(x.v) : "—").join(" / ")}; ${[st.tr, st.tm].map(x => x.ok ? n(x.v) : "—").join(" / ")}`]]);
+
+  H("I. Определение объёма котлована");
+  if (I.ok) {
+    P(I.mSrc.startsWith("Табл") ? `Крутизна откоса по Таблице 1 для грунта «${R.soil.name}» при глубине копания ${I.colName}: m = ${n(I.m)} (откос 1:${n(I.m)}).` : `Крутизна откоса принята m = ${n(I.m)} (введена вручную).`);
+    P("Размеры котлована по верху:");
+    Q(`a = c + 2·m·H = ${n(st.c.v)} + 2·${n(I.m)}·${n(st.H.v)} = ${n(I.a)} м`);
+    Q(`b = d + 2·m·H = ${n(st.d.v)} + 2·${n(I.m)}·${n(st.H.v)} = ${n(I.b)} м`);
+    P("Объём котлована:");
+    Q(`V = H/6·[a·b + c·d + (a + c)·(b + d)] = ${n(st.H.v)}/6·[${n(I.a)}·${n(I.b)} + ${n(st.c.v)}·${n(st.d.v)} + (${n(I.a)} + ${n(st.c.v)})·(${n(I.b)} + ${n(st.d.v)})] = ${n(st.H.v)}/6·[${n(I.ab, 2)} + ${n(I.cd, 2)} + ${n(I.mid, 2)}] = ${n(I.V, 2)} м³`);
+    P("где H – глубина котлована; a, b – ширина и длина котлована поверху; c, d – ширина и длина по дну; m – коэффициент откоса.");
+    if (I.rec) P(`По Таблице 2 для объёма ${n(I.V, 0)} м³ (диапазон ${I.rec[4]} м³) рекомендуемая вместимость ковша ${n(I.rec[2])}–${n(I.rec[3])} м³.`);
+  } else P("Недостаточно данных.");
+
+  H("II. Подбор экскаватора");
+  ["a", "b"].forEach(x => {
+    const E = R.E[x];
+    H(`${E.title}${E.ok ? `, q = ${n(E.q)} м³` : ""}`, 3);
+    if (!E.ok) { P("Недостаточно данных."); return; }
+    const p = E.p;
+    Q(interpLine(p.tc, "Тц", p.q, "с", "Таблица 4"));
+    Q(interpLine(p.nv, "Нвр", p.q, "маш-ч", "Таблица 5"));
+    P("Эксплуатационная производительность:");
+    Q(`Пэ = 3600·T/Тц·q·Kн·(1/Kр)·Kв = 3600·8/${n(p.tc.v, 4)}·${n(p.q)}·${n(E.Kn)}·(1/${n(E.Kr)})·${n(E.Kv)} = ${n(p.P, 1)} м³/смену`);
+    P("Норма выработки:");
+    Q(`Нвыр = 100·T/Нвр = 100·8/${n(p.nv.v, 4)} = ${n(p.Nvyr, 1)} м³/смену`);
+    Q(`1,5·Нвыр = 1,5·${n(p.Nvyr, 1)} = ${n(p.lim, 1)} м³/смену`);
+    P(`Проверка условия 1,5·Нвыр > Пэ ≥ Нвыр: ${n(p.lim, 1)} > ${n(p.P, 1)} ≥ ${n(p.Nvyr, 1)} — ${p.cond ? "условие выполняется" : `условие не выполняется (${p.low ? `Пэ больше 1,5·Нвыр на ${n((p.P / p.lim - 1) * 100, 1)} %` : "Пэ меньше Нвыр"})`}.`);
+    P("Потребная продолжительность работы:");
+    Q(`Nсм = Vкотл/Пэ = ${n(I.V, 2)}/${n(p.P, 1)} = ${n(E.Nsm, 2)} смены`);
+    if (Number.isFinite(E.Ndn)) Q(`Nдн = Nсм/n = ${n(E.Nsm, 2)}/${n(st.nsh.v, 0)} = ${n(E.Ndn, 2)} дня`);
+    if (Number.isFinite(E.cost)) Q(`Стоимость аренды: С = Nсм·T·Ц = ${n(E.Nsm, 4)}·8·${n(E.rent, 2)} = ${n(E.cost, 0)} руб.`);
+  });
+  if (R.E.a.ok && R.E.b.ok) {
+    const A = R.E.a, B = R.E.b, c = (E, f) => f(E);
+    H("Сравнение экскаваторов", 3);
+    T([["Показатель", A.title, B.title],
+      ["Вместимость ковша q, м³", n(A.q), n(B.q)],
+      ["Пэ, м³/смену", n(A.p.P, 1), n(B.p.P, 1)],
+      ["Нвыр … 1,5·Нвыр, м³/смену", `${n(A.p.Nvyr, 1)} … ${n(A.p.lim, 1)}`, `${n(B.p.Nvyr, 1)} … ${n(B.p.lim, 1)}`],
+      ["Условие производительности", A.p.cond ? "выполняется" : "не выполняется", B.p.cond ? "выполняется" : "не выполняется"],
+      ["Nсм / Nдн", `${n(A.Nsm, 2)} / ${n(A.Ndn, 2)}`, `${n(B.Nsm, 2)} / ${n(B.Ndn, 2)}`],
+      ["Аренда, руб./ч", Number.isFinite(A.rent) ? n(A.rent, 2) : "—", Number.isFinite(B.rent) ? n(B.rent, 2) : "—"],
+      ["Стоимость аренды на весь объём, руб.", Number.isFinite(A.cost) ? n(A.cost, 0) : "—", Number.isFinite(B.cost) ? n(B.cost, 0) : "—"]]);
+  }
+  if (R.best) P(`Вывод: принимаем ${R.best.title}${R.bestWhy && R.bestWhy.length ? ` — ${R.bestWhy.join("; ")}` : ""}.`.replace(/₽/g, "руб."));
+
+  H("III. Подсчёт количества автосамосвалов");
+  const III = R.III;
+  if (III.ok) {
+    const E = III.E;
+    P(`Расчёт выполнен для экскаватора: ${E.title}, q = ${n(E.q)} м³.`);
+    P(S.qcMode === "Ввести вручную" ? `1) Грузоподъёмность автосамосвала принята Qс = ${n(III.Qc)} т.` : `1) По Таблице 6 при Lср = ${n(st.L.v)} км и ёмкости ковша ${n(III.lookup.qCol)} м³ грузоподъёмность автосамосвала Qс = ${n(III.Qc)} т${III.exact ? "" : " (ближайшие большие значения таблицы)"}.`);
+    P("2) Масса грунта в ковше экскаватора:");
+    Q(III.mul ? `Q = q·Kн·Kр·ρ = ${n(E.q)}·${n(E.Kn)}·${n(E.Kr)}·${n(R.soil.rho, 0)} = ${n(III.Qkg, 1)} кг = ${n(III.Qt, 3)} т` : `Q = q·Kн·(1/Kр)·ρ = ${n(E.q)}·${n(E.Kn)}·(1/${n(E.Kr)})·${n(R.soil.rho, 0)} = ${n(III.Qkg, 1)} кг = ${n(III.Qt, 3)} т`);
+    P("3) Количество ковшей грунта, загружаемых в кузов:");
+    Q(`n = Qс/Q = ${n(III.Qc)}/${n(III.Qt, 3)} = ${n(III.nRaw, 3)}`);
+    Q(`при округлении в меньшую сторону n = ${III.lo.n}: n·Q/Qс = ${III.lo.n}·${n(III.Qt, 3)}/${n(III.Qc)} = ${n(III.lo.load, 3)} ${III.lo.ok ? "≥ 0,9 — недогруз допустим" : "< 0,9 — недогруз больше 10 %"}`);
+    Q(`при округлении в большую сторону n = ${III.hi.n}: n·Q/Qс = ${III.hi.n}·${n(III.Qt, 3)}/${n(III.Qc)} = ${n(III.hi.load, 3)} ${III.hi.ok ? "≤ 1,05 — перегруз допустим" : "> 1,05 — перегруз больше 5 %"}`);
+    P(`Принимаем n = ${III.n}${III.pickOk ? "." : " — ближайшее к полной загрузке (допуски методички не выполняются)."}`);
+    P("4) Объём грунта в кузове автосамосвала:");
+    Q(`V = Q·n/ρ = ${n(III.Qkg, 1)}·${III.n}/${n(R.soil.rho, 0)} = ${n(III.Vbody, 3)} м³`);
+    P("5) Продолжительность цикла автосамосвала. Время погрузки:");
+    Q(`tп = V·Нвр/100 = ${n(III.Vbody, 3)}·${n(E.p.nv.v, 4)}/100 = ${n(III.Vbody * E.p.nv.v / 100, 5)} маш-ч = ${n(III.tp, 3)} мин`);
+    Q(`Тц = tп + 60·L/Vг + tр + 60·L/Vп + tм = ${n(III.tp, 3)} + 60·${n(st.L.v)}/${n(st.vg.v)} + ${n(st.tr.v)} + 60·${n(st.L.v)}/${n(st.vp.v)} + ${n(st.tm.v)} = ${n(III.tp, 3)} + ${n(III.tg, 3)} + ${n(st.tr.v)} + ${n(III.tb, 3)} + ${n(st.tm.v)} = ${n(III.Tc, 3)} мин`);
+    P("6) Требуемое количество автосамосвалов:");
+    Q(`N = Тц/tп = ${n(III.Tc, 3)}/${n(III.tp, 3)} = ${n(III.Nraw, 3)} ≈ ${III.N} шт. (округление до ближайшего меньшего целого)`);
+  } else P("Недостаточно данных.");
+
+  const V = verdict(R);
+  H("Заключение");
+  P(V.text);
+  V.checks.forEach(c => out.push({ t: "check", ok: c.ok, level: c.level, text: c.text }));
+  P("Проверена расчётная часть по формулам и таблицам методички. Схему котлована, подбор существующих моделей машин и выводы проверьте отдельно.");
+  return out;
+}
+
+function partFinal(R) {
+  const V = verdict(R);
+  const icon = c => c.ok ? "✓" : c.level === "warn" ? "!" : c.level === "miss" ? "…" : "✕";
+  const head = V.status === "ok" ? note("ok", "Вердикт", esc(V.text)) : V.status === "fail" ? note("warn", "Вердикт", esc(V.text)) : note("info", "Вердикт", esc(V.text));
+  return `<section class="part final"><div class="phead"><span class="roman">✓</span><h2>Итоговая проверка</h2></div>
+    ${head}
+    <ul class="checks">${V.checks.map(c => `<li class="${c.level}"><span>${icon(c)}</span>${esc(c.text)}</li>`).join("")}</ul>
+    ${V.complete ? `<div class="dl"><div><b>${V.status === "ok" ? "Скачайте расчёт с полностью расписанными формулами" : "Можно скачать расчёт — замечания войдут в файл"}</b><span>Формулы записаны с подстановкой чисел: a = c + 2·m·H = 24 + 2·0,5·2,9 = 26,9 м</span></div>
+      <div class="dl-b"><button class="btn dark" id="b-docx" type="button">Скачать Word</button><button class="btn dark" id="b-pdf" type="button">Скачать PDF</button></div></div>
+      <p class="eq" id="dl-msg">Если файл не скачался, откройте сайт swerwee.github.io/zemlyanye-raboty-pro — в просмотрщиках внутри приложений скачивание может быть заблокировано.</p>` : ""}
+  </section>`;
+}
+
+/* ---------- Word (.docx), собирается без внешних библиотек ---------- */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  files.forEach(([name, text]) => {
+    const nb = enc.encode(name), db = enc.encode(text), crc = crc32(db);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true); lh.setUint32(18, db.length, true); lh.setUint32(22, db.length, true);
+    lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), nb, db);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, db.length, true); ch.setUint32(24, db.length, true);
+    ch.setUint16(28, nb.length, true); ch.setUint32(42, off, true);
+    central.push(new Uint8Array(ch.buffer), nb);
+    off += 30 + nb.length + db.length;
+  });
+  const csize = central.reduce((a, b) => a + b.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, csize, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+function buildDocx(model) {
+  const x = t => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const run = (t, o = {}) => `<w:r><w:rPr>${o.b ? "<w:b/>" : ""}${o.color ? `<w:color w:val="${o.color}"/>` : ""}${o.sz ? `<w:sz w:val="${o.sz}"/><w:szCs w:val="${o.sz}"/>` : ""}</w:rPr><w:t xml:space="preserve">${x(t)}</w:t></w:r>`;
+  const para = (inner, o = {}) => `<w:p><w:pPr>${o.style ? `<w:pStyle w:val="${o.style}"/>` : ""}${o.jc ? `<w:jc w:val="${o.jc}"/>` : ""}${o.ind ? `<w:ind w:left="${o.ind}"/>` : ""}<w:spacing w:after="${o.after ?? 120}"/></w:pPr>${inner}</w:p>`;
+  const body = model.map(b => {
+    if (b.t === "title") return para(run(b.text, { b: true, sz: 32 }), { jc: "center", after: 240 });
+    if (b.t === "h") return para(run(b.text, { b: true, sz: b.l === 2 ? 30 : 28 }), { after: 120 });
+    if (b.t === "p") return para(run(b.text));
+    if (b.t === "eq") return para(run(b.text), { ind: 567 });
+    if (b.t === "check") return para(run((b.ok ? "✓ " : b.level === "warn" ? "! " : "✕ ") + b.text, { color: b.ok ? "1B7A4A" : b.level === "warn" ? "8C5600" : "B42318" }), { ind: 284 });
+    if (b.t === "table") {
+      const cols = b.rows[0].length, w = Math.floor(9350 / cols);
+      return `<w:tbl><w:tblPr><w:tblW w:w="9350" w:type="dxa"/><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(k => `<w:${k} w:val="single" w:sz="4" w:space="0" w:color="808080"/>`).join("")}</w:tblBorders><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${b.rows[0].map(() => `<w:gridCol w:w="${w}"/>`).join("")}</w:tblGrid>` +
+        b.rows.map((r, i) => `<w:tr>${r.map(c => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/></w:tcPr>${para(run(c, { b: i === 0, sz: 24 }), { after: 0 })}</w:tc>`).join("")}</w:tr>`).join("") + `</w:tbl>` + para("", { after: 120 });
+    }
+    return "";
+  }).join("");
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1701" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/><w:lang w:val="ru-RU"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
+  return zipStore([
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`],
+    ["word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ["word/document.xml", doc], ["word/styles.xml", styles]]);
+}
+/* ---------- PDF (pdfmake со шрифтом Roboto, загружается по нажатию) ---------- */
+function loadScript(src) { return new Promise((ok, bad) => { const sc = document.createElement("script"); sc.src = src; sc.onload = ok; sc.onerror = () => bad(new Error(src)); document.head.appendChild(sc); }); }
+async function buildPdf(model, name) {
+  if (!window.pdfMake || !window.pdfMake.vfs) {
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js");
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js");
+  }
+  const content = model.map(b => {
+    if (b.t === "title") return { text: b.text, style: "title" };
+    if (b.t === "h") return { text: b.text, style: b.l === 2 ? "h2" : "h3" };
+    if (b.t === "p") return { text: b.text, margin: [0, 0, 0, 5] };
+    if (b.t === "eq") return { text: b.text, margin: [18, 0, 0, 5] };
+    if (b.t === "check") return { text: (b.ok ? "✓ " : b.level === "warn" ? "! " : "✕ ") + b.text, color: b.ok ? "#1B7A4A" : b.level === "warn" ? "#8C5600" : "#B42318", margin: [10, 0, 0, 3] };
+    if (b.t === "table") return { table: { headerRows: 1, widths: b.rows[0].map((_, i) => i === 0 ? "*" : "auto"), body: b.rows.map((r, i) => r.map(c => ({ text: c, bold: i === 0, fontSize: 9.5 }))) }, layout: { hLineColor: "#999", vLineColor: "#999" }, margin: [0, 2, 0, 10] };
+    return "";
+  });
+  window.pdfMake.createPdf({ pageSize: "A4", pageMargins: [56, 48, 40, 48], content, defaultStyle: { font: "Roboto", fontSize: 10.5, lineHeight: 1.2 },
+    styles: { title: { fontSize: 15, bold: true, alignment: "center", margin: [0, 0, 0, 10] }, h2: { fontSize: 13, bold: true, margin: [0, 10, 0, 5] }, h3: { fontSize: 11.5, bold: true, margin: [0, 8, 0, 4] } } }).download(name);
+}
+function fileBase() { const v = curVar(); return v ? `Расчёт_курсовой_ТПЗР_${S.group}_В${+S.variant + 1}` : "Расчёт_курсовой_ТПЗР"; }
+function saveBlob(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+
 function partTables(R) {
   const ta = (k, title, hint) => `<div><label for="in-tab-${k}">${title}</label><textarea class="tab" id="in-tab-${k}" data-tab="${k}" spellcheck="false">${esc(S.tables[k])}</textarea>
     <div class="h${R.tabErr[k] ? " err" : ""}">${esc(R.tabErr[k] || hint)}</div></div>`;
@@ -729,7 +953,7 @@ function render() {
   $("in-group").onchange = e => { S.group = e.target.value; S.variant = ""; save(); render(); };
   $("in-variant").onchange = e => { S.variant = e.target.value; const v = curVar(); if (v) { S.c = v.c; S.d = v.d; S.H = v.H; S.L = v.L; S.soil = v.soil; } save(); render(); };
   $("variant").innerHTML = variantHtml(R);
-  $("report").innerHTML = ticket(R) + partI(R) + partII(R) + partIII(R) + partTables(R) +
+  $("report").innerHTML = ticket(R) + partI(R) + partII(R) + partIII(R) + partFinal(R) + partTables(R) +
     `<p class="foot">Формулы и таблицы — по методичке курсовой «Технология производства земляных работ». Ввод хранится только в этом браузере.</p>`;
   [...document.querySelectorAll("#report details")].forEach((d, i) => { if (open[i]) d.open = true; });
   document.querySelectorAll("[data-k]").forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => { S[el.dataset.k] = el.value; save(); render(); }));
@@ -738,6 +962,8 @@ function render() {
     el.addEventListener("keydown", e => { if (e.key === "Tab") { e.preventDefault(); const a = el.selectionStart; el.value = el.value.slice(0, a) + "\t" + el.value.slice(el.selectionEnd); el.selectionStart = el.selectionEnd = a + 1; el.dispatchEvent(new Event("input")); } });
   });
   document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copy($(b.dataset.copy).innerText));
+  const bd = $("b-docx"); if (bd) bd.onclick = () => { try { saveBlob(buildDocx(reportModel(calc(S))), fileBase() + ".docx"); toast(true, "Word-файл сформирован"); } catch (e) { toast(false, "Не удалось сформировать Word-файл"); } };
+  const bp = $("b-pdf"); if (bp) bp.onclick = async () => { bp.disabled = true; bp.textContent = "Готовлю PDF…"; try { await buildPdf(reportModel(calc(S)), fileBase() + ".pdf"); toast(true, "PDF сформирован"); } catch (e) { toast(false, "Не удалось загрузить модуль PDF — проверьте интернет"); } bp.disabled = false; bp.textContent = "Скачать PDF"; };
   const bt = $("b-tables"); if (bt) bt.onclick = () => { S.tables = { ...TABLES_DEFAULT }; save(); render(); };
   if (fid && $(fid)) { const el = $(fid); el.focus(); try { if (typeof sel === "number") el.setSelectionRange(sel, sel); } catch (e) {} }
 }
