@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Калькулятор курсовой «Технология производства земляных работ»: котлован, экскаватор, самосвалы">
+<style>[hidden]{display:none!important}body{margin:0}img{max-width:100%}</style>
+<title>Земляные работы PRO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Макет: слева — карточка «Исходные данные» со всем вводом варианта (липкая), справа — расчётная записка по разделам I–III методички */
+:root {
+  --bg: #ECEFF2; --panel: #FFFFFF; --ink: #141B24; --muted: #5C6774; --line: #D6DDE4; --soft: #F2F4F6;
+  --accent: #F2B705; --accent-ink: #141B24; --accent-soft: #FFF4CC; --link: #1D5FA8;
+  --ticket: #141B24; --ticket-ink: #F4F6F8; --ticket-muted: #9AA6B2;
+  --inputbg: #FFFFFF; --inputline: #C4CDD6;
+  --ok: #1B7A4A; --ok-bg: #DFF2E7; --warn: #8C5600; --warn-bg: #FFF0D0; --err: #B42318; --err-bg: #FCE3E0;
+  --ui: "Golos Text", "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", Consolas, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1217; --panel: #161C23; --ink: #E6EBF0; --muted: #96A2AF; --line: #2A333D; --soft: #1C232B;
+  --accent: #F2B705; --accent-ink: #141B24; --accent-soft: #3A3010; --link: #8DB9F0;
+  --ticket: #05080B; --ticket-ink: #F4F6F8; --ticket-muted: #8D99A5;
+  --inputbg: #10151B; --inputline: #36414D;
+  --ok: #62C793; --ok-bg: #12301F; --warn: #EBB24E; --warn-bg: #36290F; --err: #F28B80; --err-bg: #3A1A17; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1217; --panel: #161C23; --ink: #E6EBF0; --muted: #96A2AF; --line: #2A333D; --soft: #1C232B;
+  --accent: #F2B705; --accent-ink: #141B24; --accent-soft: #3A3010; --link: #8DB9F0;
+  --ticket: #05080B; --ticket-ink: #F4F6F8; --ticket-muted: #8D99A5;
+  --inputbg: #10151B; --inputline: #36414D;
+  --ok: #62C793; --ok-bg: #12301F; --warn: #EBB24E; --warn-bg: #36290F; --err: #F28B80; --err-bg: #3A1A17; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--ui) }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 18px 48px }
+h1, h2, h3 { margin: 0; text-wrap: balance }
+button { font: inherit; cursor: pointer }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px }
+input { font-family: var(--mono); font-variant-numeric: tabular-nums }
+
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-bottom: 16px }
+.brand { display: flex; align-items: center; gap: 12px }
+.mark { width: 38px; height: 38px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; flex: none }
+.mark svg { width: 26px; height: 26px }
+.brand h1 { font-size: 21px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1 }
+.brand p { margin: 2px 0 0; font-size: 13px; color: var(--muted) }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 7px 13px; border-radius: 8px; font-size: 13.5px; font-weight: 500 }
+.btn:hover { border-color: var(--ink) }
+.btn.dark { background: var(--ink); color: var(--panel); border-color: var(--ink) }
+.toast { font-size: 13px; padding: 4px 10px; border-radius: 6px; background: var(--ok-bg); color: var(--ok) }
+.toast.bad { background: var(--warn-bg); color: var(--warn) }
+
+.pick { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px }
+.nojs { font-size: 15px; line-height: 1.5; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 12px 14px }
+.pickrow { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end }
+.pickrow label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
+.pickrow label.grow { flex: 0 1 340px; min-width: 0 }
+.pickrow select { padding: 8px 10px; border: 1px solid var(--inputline); background: var(--inputbg); color: var(--ink); border-radius: 8px; font: 500 15px var(--ui); text-transform: none; letter-spacing: 0; max-width: 100% }
+.pickrow select#in-variant { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) }
+.vinfo { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; padding-bottom: 4px }
+.vinfo b { font-weight: 600 } .vinfo span { color: var(--muted) }
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
+.exc { border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
+.exc.best { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) }
+.exc-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px }
+.exc-h h3 { font-size: 15.5px; font-weight: 700; flex: 1 1 auto; min-width: 0 }
+.exc ol.steps li { font-size: 13.5px }
+h3.sub { font-size: 15px; font-weight: 700; margin: 18px 0 6px }
+table.cmp td:not(:first-child), table.cmp th:not(:first-child) { text-align: right }
+table.cmp td:first-child { font-family: var(--ui); color: var(--muted) }
+.f input.txt { text-align: left; font-family: var(--ui) }
+.group h3 .pill { margin-left: 6px; text-transform: none; letter-spacing: 0; vertical-align: 1px }
+.layout { display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 20px; align-items: start }
+
+aside.variant { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; max-height: calc(100vh - 24px); overflow: auto }
+.vhead { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px }
+.vhead h2 { font-size: 16px; font-weight: 700 }
+.vhead span { font-size: 12.5px; color: var(--muted) }
+.group { padding: 12px 16px 14px; border-bottom: 1px solid var(--line) }
+.group:last-child { border-bottom: 0 }
+.group h3 { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-bottom: 8px }
+.f { display: grid; grid-template-columns: minmax(0, 1fr) 100px 42px; gap: 0 8px; align-items: center; padding: 5px 0 }
+.f label { font-size: 13.5px; line-height: 1.25 }
+.f label i { font-style: normal; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: 3px }
+.f input, .f select { width: 100%; padding: 6px 8px; border: 1px solid var(--inputline); background: var(--inputbg); color: var(--ink); border-radius: 6px; font-size: 14px }
+.f input { text-align: right }
+.f select { font-family: var(--ui); font-size: 13.5px }
+.f .u { font-size: 12.5px; color: var(--muted) }
+.f .h { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin-top: 2px }
+.f .h.warn { color: var(--warn); font-weight: 600 } .f .h.err { color: var(--err); font-weight: 600 }
+.f.wide { grid-template-columns: minmax(0, 1fr) }
+.f.wide label { margin-bottom: 4px }
+.f.bad input, .f.bad select { border-color: var(--err); background: var(--err-bg) }
+.f.dim { opacity: .45 }
+.sweep-in { display: grid; grid-template-columns: repeat(3, minmax(0, 120px)); gap: 8px; margin: 8px 0 }
+.sweep-in label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 2px }
+.sweep-in input { padding: 5px 8px; border: 1px solid var(--inputline); background: var(--inputbg); color: var(--ink); border-radius: 6px; text-align: right }
+
+.ticket { background: var(--ticket); color: var(--ticket-ink); border-radius: 12px; padding: 16px 18px 16px 24px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 18px; position: relative; overflow: hidden }
+.ticket::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 8px; background: repeating-linear-gradient(-45deg, var(--accent) 0 7px, var(--ticket) 7px 14px) }
+.kpi { min-width: 0 }
+.kpi .l { font-size: 12px; color: var(--ticket-muted) }
+.kpi .n { font-family: var(--mono); font-size: 26px; line-height: 1.15; color: var(--ticket-ink); white-space: nowrap }
+.kpi .n small { font-size: 13px; color: var(--ticket-muted); margin-left: 4px; font-family: var(--ui) }
+.kpi .s { font-size: 12px; margin-top: 3px; color: var(--ticket-muted) }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600 }
+.pill.ok { background: var(--ok-bg); color: var(--ok) } .pill.warn { background: var(--warn-bg); color: var(--warn) } .pill.err { background: var(--err-bg); color: var(--err) }
+.pill.muted { background: var(--soft); color: var(--muted) }
+
+.report { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+section.part { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0 }
+.phead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 14px }
+.phead .roman { font-family: var(--mono); font-size: 14px; font-weight: 500; background: var(--accent); color: var(--accent-ink); border-radius: 6px; padding: 2px 9px }
+.phead h2 { font-size: 19px; font-weight: 700; flex: 1 1 auto }
+.copy { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 7px; padding: 4px 10px; font-size: 12.5px }
+.copy:hover { color: var(--ink); border-color: var(--ink) }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start }
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 10px }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; font-size: 14px }
+ol.steps li::before { content: counter(s); font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; margin-top: 1px }
+.eq { font-family: var(--mono); font-size: 12.5px; color: var(--muted); display: block; margin-top: 2px; overflow-wrap: anywhere }
+.eq b { color: var(--ink); font-weight: 500 }
+.res { font-family: var(--mono); font-weight: 500; background: var(--accent-soft); padding: 0 4px; border-radius: 4px; color: var(--ink); white-space: nowrap }
+.tag { font-size: 11.5px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-left: 4px; white-space: nowrap }
+.tag.t { background: var(--soft); color: var(--muted) } .tag.i { background: var(--accent-soft); color: var(--warn) } .tag.e { background: var(--warn-bg); color: var(--warn) }
+.notes { display: flex; flex-direction: column; gap: 8px; margin-top: 14px }
+.note { padding: 9px 12px; border-radius: 8px; font-size: 13.5px; border-left: 4px solid }
+.note b { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 1px }
+.note.ok { background: var(--ok-bg); border-color: var(--ok) } .note.ok b { color: var(--ok) }
+.note.warn { background: var(--warn-bg); border-color: var(--warn) } .note.warn b { color: var(--warn) }
+.note.err { background: var(--err-bg); border-color: var(--err) } .note.err b { color: var(--err) }
+.note.info { background: var(--soft); border-color: var(--line); color: var(--muted) }
+figure.sketch { margin: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--soft) }
+figure.sketch figcaption { font-size: 12px; color: var(--muted); margin-top: 6px }
+svg text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted) }
+.tbox { overflow-x: auto; margin-top: 4px }
+table.t { border-collapse: collapse; width: 100%; font-size: 13px }
+table.t th { text-align: right; font-weight: 600; font-size: 12px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+table.t th:first-child, table.t td:first-child { text-align: left }
+table.t td { padding: 5px 8px; border-bottom: 1px solid var(--soft); text-align: right; white-space: nowrap; font-family: var(--mono) }
+table.t tr.yes td { background: var(--ok-bg) } table.t tr.cur td { font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent) }
+table.t td.okc { color: var(--ok); font-family: var(--ui); font-weight: 600 } table.t td.noc { color: var(--muted); font-family: var(--ui) }
+sup { font-size: 9px; color: var(--warn) }
+details { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px }
+details summary { cursor: pointer; font-weight: 600; font-size: 14px }
+details summary span { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px }
+details[open] summary { margin-bottom: 10px }
+.choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 4px }
+.opt { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px }
+.opt.sel { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink) }
+.opt .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px }
+.opt .big { font-family: var(--mono); font-size: 20px }
+textarea.tab { width: 100%; min-height: 130px; padding: 8px; border: 1px solid var(--inputline); background: var(--inputbg); color: var(--ink); border-radius: 8px; font: 12px/1.55 var(--mono); resize: vertical; tab-size: 8 }
+.tabs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
+.tabs-grid label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px }
+.tabs-grid .h { font-size: 12px; color: var(--muted); margin-top: 3px }
+.tabs-grid .h.err { color: var(--err); font-weight: 600 }
+.foot { font-size: 12.5px; color: var(--muted); text-align: center; margin-top: 4px }
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr) }
+  aside.variant { position: static; max-height: none }
+  .ticket { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .grid2, .tabs-grid, .duo { grid-template-columns: minmax(0, 1fr) }
+}
+@media (max-width: 460px) {
+  .f { grid-template-columns: minmax(0, 1fr) 92px 34px }
+  .choice { grid-template-columns: minmax(0, 1fr) }
+  section.part { padding: 14px }
+  .kpi .n { font-size: 21px }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 26 26"><path d="M3 20h20M5 20l3-8h7l2 4h4v4" fill="none" stroke="#141B24" stroke-width="2" stroke-linejoin="round"/><path d="M15 12l4-7 4 3-2 3" fill="none" stroke="#141B24" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="21" r="1.6" fill="#141B24"/><circle cx="18" cy="21" r="1.6" fill="#141B24"/></svg></div>
+      <div><h1>Земляные работы PRO</h1><p>Курсовая «Технология производства земляных работ»: котлован, экскаватор, самосвалы</p></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="b-clear" type="button">Очистить</button>
+      <button class="btn dark" id="b-copyall" type="button">Скопировать весь расчёт</button>
+      <span id="toast" class="toast" hidden></span>
+    </div>
+  </header>
+  <div class="pick" id="pick"><div class="nojs" id="nojs"><b>Приложение не запустилось.</b> Этот просмотрщик (например, встроенный в Telegram на iPhone) не выполняет скрипты, а без них расчёт не работает. Откройте ссылку на приложение в браузере — Safari или Chrome.</div></div>
+  <div class="layout">
+    <aside class="variant" id="variant" aria-label="Исходные данные варианта"></aside>
+    <main class="report" id="report"></main>
+  </div>
+</div>
+
+<script>
+/* ===================== ТАБЛИЦЫ МЕТОДИЧКИ ===================== */
+const TABLES_DEFAULT = {
+  t13: `Лесс мягкий без примесей; I; 1600; 1,05; 1,15; 1,10; 1,20; 0; 0,5; 0,5
+Лёсс мягкий с примесью гравия или гальки; I; 1800; 1,05; 1,15; 1,10; 1,20; 0; 0,6; 0,7
+Песок без примесей, а также с примесью щебня, гравия, гальки или строительного мусора до 10% по объему; I; 1600; 0,80; 0,90; 1,05; 1,20; 0,5; 1; 1
+Суглинок легкий лессовидный без примесей; I; 1700; 1,20; 1,30; 1,10; 1,15; 0; 0,5; 0,75
+Суглинок легкий лессовидный с примесью щебня, гальки или строительного мусора до 10% по объему; I; 1700; 1,20; 1,30; 1,10; 1,15; 0; 0,55; 0,8
+Супесь без примесей, а также с примесью гравия, гальки, щебня или строительного мусора до 10% по объему; I; 1650; 1,05; 1,15; 1,05; 1,10; 0,25; 0,67; 0,85
+Глина жирная мягкая и мягкая без примесей; II; 1800; 1,20; 1,30; 1,15; 1,25; 0; 0,5; 0,5`,
+  t4: `90; 0,5; 22
+90; 1,0; 26
+90; 2,0; 32
+135; 0,5; 24
+135; 1,0; 28
+135; 2,0; 36
+180; 0,5; 26
+180; 1,0; 31
+180; 2,0; 40`,
+  t5: `0,25; 4,5; 5,9; 7,8
+0,4; 3,2; 4,1; 5,2
+0,5; 2,8; 3,4; 4,2
+0,65; 2,1; 2,6; 3,2
+1; 1,9; 2,2; 2,8
+1,25; 2,6; 3; 4
+1,6; 1,9; 2,2; 2,8`,
+  t6: `L; 0,4; 0,65; 1; 1,25; 1,6; 2,5
+0,5; 4,5; 4,5; 7; 7; 10; –
+1,0; 7; 7; 10; 10; 10; 12
+1,5; 7; 7; 10; 10; 12; 18
+2,0; 7; 10; 10; 12; 18; 18
+3,0; 7; 10; 12; 12; 18; 27`,
+};
+/* Варианты групп (из таблиц вариантов): длина d, ширина c, глубина H по дну котлована; грунт; Lср, км */
+const GROUPS = {"СГС-311": [], "СГС-312": [{"short": "А.Р.С", "d": "70", "c": "10", "H": "3,5", "soil": "Лесс мягкий без примесей", "L": "3"}, {"short": "А.В.В", "d": "75", "c": "11", "H": "1,8", "soil": "Лёсс мягкий с примесью гравия или гальки", "L": "0,5"}, {"short": "Б.Д.И", "d": "80", "c": "12", "H": "1,9", "soil": "Песок без примесей, а также с примесью щебня, гравия, гальки или строительного мусора до 10% по объему", "L": "1"}, {"short": "Г.В.А", "d": "85", "c": "13", "H": "2", "soil": "Суглинок легкий лессовидный без примесей", "L": "1,5"}, {"short": "Д.А.Д", "d": "90", "c": "14", "H": "2,1", "soil": "Суглинок легкий лессовидный с примесью щебня, гальки или строительного мусора до 10% по объему", "L": "2"}, {"short": "Д.К.К", "d": "95", "c": "15", "H": "2,2", "soil": "Супесь без примесей, а также с примесью гравия, гальки, щебня или строительного мусора до 10% по объему", "L": "3"}, {"short": "Ж.М.А", "d": "100", "c": "16", "H": "2,3", "soil": "Глина жирная мягкая и мягкая без примесей", "L": "0,5"}, {"short": "З.Д.А", "d": "105", "c": "17", "H": "2,4", "soil": "Лесс мягкий без примесей", "L": "1"}, {"short": "И.Е.И", "d": "110", "c": "18", "H": "2,5", "soil": "Лёсс мягкий с примесью гравия или гальки", "L": "1,5"}, {"short": "К.Д.Г", "d": "115", "c": "19", "H": "3,8", "soil": "Песок без примесей, а также с примесью щебня, гравия, гальки или строительного мусора до 10% по объему", "L": "2"}, {"short": "К.Е.И", "d": "120", "c": "20", "H": "3,9", "soil": "Суглинок легкий лессовидный без примесей", "L": "3"}, {"short": "К.В.Д", "d": "125", "c": "21", "H": "4", "soil": "Суглинок легкий лессовидный с примесью щебня, гальки или строительного мусора до 10% по объему", "L": "0,5"}, {"short": "К.О.В", "d": "130", "c": "22", "H": "4,1", "soil": "Супесь без примесей, а также с примесью гравия, гальки, щебня или строительного мусора до 10% по объему", "L": "1"}, {"short": "К.Н.С", "d": "135", "c": "23", "H": "4,2", "soil": "Глина жирная мягкая и мягкая без примесей", "L": "1,5"}, {"short": "К.М.И", "d": "140", "c": "24", "H": "4,3", "soil": "Лесс мягкий без примесей", "L": "2"}, {"short": "М.И.И", "d": "145", "c": "25", "H": "4,4", "soil": "Лёсс мягкий с примесью гравия или гальки", "L": "3"}, {"short": "О.В.Д", "d": "150", "c": "26", "H": "4,5", "soil": "Песок без примесей, а также с примесью щебня, гравия, гальки или строительного мусора до 10% по объему", "L": "0,5"}, {"short": "П.А.В", "d": "155", "c": "27", "H": "4,6", "soil": "Суглинок легкий лессовидный без примесей", "L": "1"}, {"short": "Р.В.О", "d": "160", "c": "22", "H": "2,5", "soil": "Суглинок легкий лессовидный с примесью щебня, гальки или строительного мусора до 10% по объему", "L": "1,5"}, {"short": "С.Н.В", "d": "165", "c": "23", "H": "2,8", "soil": "Супесь без примесей, а также с примесью гравия, гальки, щебня или строительного мусора до 10% по объему", "L": "3"}, {"short": "С.И.А", "d": "170", "c": "24", "H": "2,9", "soil": "Глина жирная мягкая и мягкая без примесей", "L": "0,5"}, {"short": "Ш.Д.А", "d": "175", "c": "25", "H": "3", "soil": "Лесс мягкий без примесей", "L": "1"}], "СГС-313": []};
+const T2 = [[0, 1500, 0.15, 0.35, "до 1500"], [1500, 5000, 0.35, 0.5, "1500–5000"], [5000, 15000, 0.5, 1, "5000–15000"],
+  [15000, 20000, 1.5, 2.5, "15000–20000"], [20000, Infinity, 1.75, 2, "свыше 20000"]];
+const RANGES = { Kv: [0.7, 0.9], vg: [20, 25], vp: [30, 40], tr: [1, 2], tm: [2, 3] };
+const T_SHIFT = 8;
+
+/* ===================== РАСЧЁТ ===================== */
+const EPS = 1e-9;
+const r9 = x => Math.round(x * 1e9) / 1e9;
+function num(v) {
+  if (v === null || v === undefined) return { empty: true };
+  const s = String(v).trim(); if (s === "") return { empty: true };
+  const t = s.replace(/\s/g, "").replace(",", ".");
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return { text: true };
+  return { v: parseFloat(t) };
+}
+function need(v, cond, bad) {
+  const p = num(v);
+  if (p.empty) return { kind: "miss", msg: "Введите значение" };
+  if (p.text) return { kind: "err", msg: "Нужно число" };
+  if (!cond(p.v)) return { kind: "err", msg: bad };
+  return { ok: true, v: p.v };
+}
+const pos = (v, bad = "Должно быть больше 0") => need(v, x => x > 0, bad);
+const nonneg = v => need(v, x => x >= 0, "Не может быть отрицательным");
+const intge1 = v => need(v, x => x >= 1 && x === Math.floor(x), "Целое число не меньше 1");
+function fx(x, d = 3) { return x === null || x === undefined || !Number.isFinite(x) ? "—" : x.toLocaleString("ru-RU", { maximumFractionDigits: d }); }
+
+function splitLine(line) { return /[;\t]/.test(line) ? line.split(/[;\t]/).map(x => x.trim()) : line.trim().split(/\s+/); }
+function parseTables(T) {
+  const err = {}, out = {};
+  const lines = s => String(s || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  out.soils = [];
+  lines(T.t13).forEach((l, i) => {
+    const p = splitLine(l), n = p.slice(2).map(x => num(x).v);
+    if (p.length < 10 || n.some(x => x === undefined) || !/^(I|II|III)$/.test(p[1])) { err.t13 = `Строка ${i + 1}: нужно 10 полей — грунт; группа (I, II, III); ρ; Kн от; Kн до; Kр от; Kр до; m 1,5; m 3; m 5`; return; }
+    out.soils.push({ name: p[0], group: p[1], rho: n[0], kn: [n[1], n[2]], kr: [n[3], n[4]], m: [n[5], n[6], n[7]] });
+  });
+  out.t4 = {};
+  lines(T.t4).forEach((l, i) => {
+    const p = splitLine(l).map(x => num(x).v);
+    if (p.length < 3 || p.some(x => x === undefined)) { err.t4 = `Строка ${i + 1}: нужно «угол; q; Тц»`; return; }
+    (out.t4[p[0]] = out.t4[p[0]] || []).push([p[1], p[2]]);
+  });
+  Object.values(out.t4).forEach(a => a.sort((x, y) => x[0] - y[0]));
+  out.t5 = { I: [], II: [], III: [] };
+  lines(T.t5).forEach((l, i) => {
+    const p = splitLine(l).map(x => num(x).v);
+    if (p.length < 4 || p.some(x => x === undefined)) { err.t5 = `Строка ${i + 1}: нужно «q; I; II; III»`; return; }
+    out.t5.I.push([p[0], p[1]]); out.t5.II.push([p[0], p[2]]); out.t5.III.push([p[0], p[3]]);
+  });
+  Object.values(out.t5).forEach(a => a.sort((x, y) => x[0] - y[0]));
+  const l6 = lines(T.t6);
+  out.t6 = { qs: [], rows: [] };
+  if (l6.length < 2) err.t6 = "Нужна строка заголовка и хотя бы одна строка данных";
+  else {
+    out.t6.qs = splitLine(l6[0]).slice(1).map(x => num(x).v);
+    if (out.t6.qs.some(x => x === undefined)) err.t6 = "Первая строка: «L; ёмкости ковша через ;»";
+    l6.slice(1).forEach((l, i) => {
+      const p = splitLine(l), L = num(p[0]).v;
+      if (L === undefined) { err.t6 = `Строка ${i + 2}: первое значение — L, км`; return; }
+      out.t6.rows.push([L, p.slice(1).map(x => num(x).v ?? null)]);
+    });
+    out.t6.rows.sort((a, b) => a[0] - b[0]);
+  }
+  return { tb: out, err };
+}
+const MODE_EXT = "Продлить крайний отрезок", MODE_HOLD = "Взять крайнее значение", MODE_NONE = "Не считать";
+function interp(pts, x, mode) {
+  const n = pts.length;
+  if (n < 2) return { v: null, kind: "none" };
+  for (const p of pts) if (Math.abs(p[0] - x) < EPS) return { v: p[1], kind: "table", seg: [p] };
+  if (x > pts[0][0] && x < pts[n - 1][0]) {
+    let i = 0; while (pts[i + 1][0] < x) i++;
+    const a = pts[i], b = pts[i + 1];
+    return { v: a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]), kind: "interp", seg: [a, b] };
+  }
+  if (mode === MODE_NONE) return { v: null, kind: "out" };
+  const lo = x < pts[0][0];
+  if (mode === MODE_HOLD) { const p = lo ? pts[0] : pts[n - 1]; return { v: p[1], kind: "extrap", seg: [p], hold: true }; }
+  const [a, b] = lo ? [pts[0], pts[1]] : [pts[n - 2], pts[n - 1]];
+  return { v: a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]), kind: "extrap", seg: [a, b] };
+}
+function nextUp(list, x) {
+  let best = null;
+  list.forEach((v, i) => { if (v !== undefined && v + EPS >= x && (best === null || v < list[best])) best = i; });
+  return best;
+}
+
+function calc(S) {
+  const { tb, err: tabErr } = parseTables(S.tables);
+  const st = {}, R = { st, tb, tabErr };
+  const soil = tb.soils.find(x => x.name === S.soil);
+  st.soil = soil ? { ok: true } : { kind: "miss", msg: "Выберите грунт из Таблицы 3" };
+  st.c = pos(S.c); st.d = pos(S.d); st.H = pos(S.H, "Глубина больше 0");
+  st.angle = tb.t4[S.angle] && tb.t4[S.angle].length >= 2 ? { ok: true } : { kind: "miss", msg: "Нет такого угла в Таблице 4" };
+  st.L = pos(S.L);
+  st.mMode = { ok: true };
+  st.mManual = S.mMode === "Ввести вручную" ? need(S.mManual, x => x >= 0, "Не может быть отрицательным") : { ok: true, unused: true };
+  ["a", "b"].forEach(x => {
+    st[x + "q"] = pos(S[x + "q"], "Ёмкость ковша больше 0");
+    st[x + "Kn"] = pos(S[x + "Kn"]); st[x + "Kr"] = pos(S[x + "Kr"]); st[x + "Kv"] = pos(S[x + "Kv"]);
+    st[x + "Rent"] = String(S[x + "Rent"] || "").trim() === "" ? { ok: true, empty: true } : pos(S[x + "Rent"], "Ставка больше 0");
+  });
+  st.nsh = intge1(S.nsh);
+  st.vg = pos(S.vg); st.vp = pos(S.vp); st.tr = nonneg(S.tr); st.tm = nonneg(S.tm);
+  st.Qc = S.qcMode === "Ввести вручную" ? pos(S.Qc, "Грузоподъёмность больше 0") : { ok: true, unused: true };
+  R.soil = soil;
+  const rng = (k, r, src) => { if (!st[k].ok) { st[k].range = `${src}: ${fx(r[0])}–${fx(r[1])}`; return; } if (st[k].v < r[0] - EPS || st[k].v > r[1] + EPS) st[k].warn = `Вне диапазона (${src}): ${fx(r[0])}–${fx(r[1])}`; else st[k].hint = `${src}: ${fx(r[0])}–${fx(r[1])}`; };
+  ["a", "b"].forEach(x => { if (soil) { rng(x + "Kn", soil.kn, "Табл. 3"); rng(x + "Kr", soil.kr, "Табл. 3"); } rng(x + "Kv", RANGES.Kv, "методичка"); }); rng("vg", RANGES.vg, "методичка"); rng("vp", RANGES.vp, "методичка");
+  rng("tr", RANGES.tr, "методичка"); rng("tm", RANGES.tm, "методичка");
+
+  const I = R.I = {};
+  if (st.H.ok && (soil || S.mMode === "Ввести вручную")) {
+    const H = st.H.v;
+    I.col = H <= 1.5 + EPS ? 0 : H <= 3 + EPS ? 1 : H <= 5 + EPS ? 2 : null;
+    I.colName = ["до 1,5 м", "до 3 м", "до 5 м"][I.col] || "больше 5 м";
+    if (S.mMode === "Ввести вручную") { if (st.mManual.ok) { I.m = st.mManual.v; I.mSrc = "введено вручную"; } }
+    else if (I.col !== null) { I.m = soil.m[I.col]; I.mSrc = `Табл. 1, глубина ${I.colName}`; }
+    else st.mMode = { kind: "err", msg: "Глубина больше 5 м — в Таблице 1 нет; введите m вручную" };
+  }
+  if (st.c.ok && st.d.ok && st.H.ok && I.m !== undefined) {
+    const c = st.c.v, d = st.d.v, H = st.H.v, m = I.m;
+    I.a = c + 2 * m * H; I.b = d + 2 * m * H;
+    I.ab = I.a * I.b; I.cd = c * d; I.mid = (I.a + c) * (I.b + d);
+    I.V = H / 6 * (I.ab + I.cd + I.mid); I.ok = true;
+    I.rec = T2.find(r => I.V >= r[0] && I.V < r[1]);
+  }
+
+  const II = R.II = {};
+  const tcPts = tb.t4[S.angle] || [], nvPts = soil ? tb.t5[soil.group] : [];
+  const point = q => {
+    const tc = interp(tcPts, q, S.tcMode), nv = interp(nvPts, q, S.nvMode), o = { q, tc, nv };
+    if (tc.v === null || nv.v === null) { o.out = true; return o; }
+    o.base = 3600 * T_SHIFT / tc.v * q; o.Nvyr = 100 * T_SHIFT / nv.v; o.lim = 1.5 * o.Nvyr; return o;
+  };
+  const tablesOk = soil && st.angle.ok && !tabErr.t4 && !tabErr.t5;
+  R.E = {};
+  ["a", "b"].forEach((x, i) => {
+    const E = R.E[x] = { x, label: `Экскаватор ${i + 1}`, name: String(S[x + "Name"] || "").trim() };
+    E.title = E.name ? `${E.label} — ${E.name}` : E.label;
+    const sq = st[x + "q"], sn = st[x + "Kn"], sr = st[x + "Kr"], sv = st[x + "Kv"];
+    if (sq.ok && tablesOk) {
+      const p = E.p = point(sq.v);
+      if (!p.out && sn.ok && sr.ok && sv.ok) {
+        const k = sn.v / sr.v;
+        p.P = p.base * k * sv.v; p.low = p.P >= p.Nvyr - EPS; p.high = p.P < p.lim - EPS; p.cond = p.low && p.high;
+        p.KvLo = p.Nvyr / (p.base * k); p.KvHi = p.lim / (p.base * k);
+        if (I.ok) {
+          E.Nsm = I.V / p.P; if (st.nsh.ok) E.Ndn = E.Nsm / st.nsh.v;
+          if (st[x + "Rent"].ok && !st[x + "Rent"].empty) { E.rent = st[x + "Rent"].v; E.cost = E.Nsm * T_SHIFT * E.rent; }
+        }
+        E.ok = true; E.q = sq.v; E.Kn = sn.v; E.Kr = sr.v; E.Kv = sv.v;
+      }
+      if (I.rec) E.recOk = sq.v >= I.rec[2] - EPS && sq.v <= I.rec[3] + EPS;
+    }
+  });
+  // выбор лучшего: сначала условие 1,5·Нвыр > Пэ ≥ Нвыр, затем стоимость аренды за весь объём, затем число смен
+  const cands = ["a", "b"].map(x => R.E[x]).filter(E => E.ok && Number.isFinite(E.Nsm));
+  if (cands.length) {
+    const condOk = cands.filter(E => E.p.cond), pool = condOk.length ? condOk : cands;
+    const haveCost = pool.every(E => Number.isFinite(E.cost));
+    const sorted = pool.slice().sort((u, v) => (haveCost ? u.cost - v.cost : 0) || u.Nsm - v.Nsm);
+    const best = R.best = sorted[0], other = cands.find(E => E !== best);
+    const why = [];
+    if (!other) why.push("рассчитан только он");
+    else {
+      if (condOk.length === 1) why.push("только у него выполняется условие 1,5·Нвыр > Пэ ≥ Нвыр");
+      else if (!condOk.length) why.push("условие производительности не выполняется ни у одного");
+      if (condOk.length !== 1 || pool.length > 1) {
+        if (haveCost && Number.isFinite(other.cost) && Math.abs(best.cost - other.cost) > 0.5) why.push(`аренда на весь объём дешевле: ${fx(best.cost, 0)} ₽ против ${fx(other.cost, 0)} ₽`);
+        else why.push(`меньше смен на весь объём: ${fx(best.Nsm, 2)} против ${fx(other.Nsm, 2)}${haveCost ? "" : " (ставки аренды не введены)"}`);
+      }
+    }
+    R.bestWhy = why;
+  }
+  if (tablesOk) {
+    const q1 = num(S.q1).v, q2 = num(S.q2).v, dq = num(S.dq).v;
+    if (q1 > 0 && q2 >= q1 && dq > 0 && (q2 - q1) / dq <= 400) {
+      const K = II.sweepK = { kn1: soil.kn[0], kn2: soil.kn[1], kr1: soil.kr[0], kr2: soil.kr[1], kv1: RANGES.Kv[0], kv2: RANGES.Kv[1] };
+      II.sweep = [];
+      for (let i = 0; i <= Math.floor(r9((q2 - q1) / dq)); i++) {
+        const q = Math.round((q1 + i * dq) * 1e6) / 1e6, p = point(q);
+        if (!p.out) { p.Pmin = p.base * K.kn1 / K.kr2 * K.kv1; p.Pmax = p.base * K.kn2 / K.kr1 * K.kv2; p.ok = p.Pmin < p.lim - EPS && p.Pmax >= p.Nvyr - EPS; p.KvAllow = p.lim / (p.base * K.kn1 / K.kr2); }
+        II.sweep.push(p);
+      }
+      II.nOk = II.sweep.filter(x => x.ok).length;
+    }
+  }
+
+  const III = R.III = {};
+  const E = III.E = S.truckFor === "Экскаватор 1" ? R.E.a : S.truckFor === "Экскаватор 2" ? R.E.b : R.best;
+  st.qcMode = { ok: true };
+  const qT = E && E.p ? E.p.q : null;
+  if (qT && st.L.ok && !tabErr.t6) {
+    const ci = nextUp(tb.t6.qs, qT), rows = tb.t6.rows.map(r => r[0]), ri = nextUp(rows, st.L.v);
+    III.lookup = { qCol: ci !== null ? tb.t6.qs[ci] : null, LRow: ri !== null ? rows[ri] : null };
+    III.QcTable = ci !== null && ri !== null ? tb.t6.rows[ri][1][ci] : null;
+    III.exact = ci !== null && ri !== null && Math.abs(tb.t6.qs[ci] - qT) < EPS && Math.abs(rows[ri] - st.L.v) < EPS;
+    if (S.qcMode !== "Ввести вручную" && (III.QcTable === null || III.QcTable === undefined)) st.qcMode = { kind: "err", msg: "Для этих q и L в Таблице 6 нет значения — введите Qс вручную" };
+  }
+  III.Qc = S.qcMode === "Ввести вручную" ? (st.Qc.ok ? st.Qc.v : null) : III.QcTable;
+  if (III.Qc && soil && E && E.ok && st.L.ok && st.vg.ok && st.vp.ok && st.tr.ok && st.tm.ok) {
+    const mul = S.qFormula !== "С делением на Kр (как в Пэ)";
+    III.mul = mul;
+    III.Qkg = E.q * E.Kn * (mul ? E.Kr : 1 / E.Kr) * soil.rho;
+    III.Qt = III.Qkg / 1000;
+    III.nRaw = III.Qc / III.Qt;
+    const lo = Math.floor(r9(III.nRaw)), hi = Math.ceil(r9(III.nRaw));
+    const mk = n => ({ n, load: n * III.Qt / III.Qc });
+    III.lo = mk(lo); III.lo.ok = lo >= 1 && III.lo.load >= 0.9 - EPS;
+    III.hi = mk(hi); III.hi.ok = III.hi.load <= 1.05 + EPS;
+    let pick;
+    if (S.nMode === "В меньшую сторону") pick = III.lo.n >= 1 ? III.lo : III.hi;
+    else if (S.nMode === "В большую сторону") pick = III.hi;
+    else {
+      const ok = [III.lo, III.hi].filter(x => x.ok && x.n >= 1);
+      const pool = ok.length ? ok : [III.lo, III.hi].filter(x => x.n >= 1);
+      pick = pool.slice().sort((a, b) => Math.abs(a.load - 1) - Math.abs(b.load - 1))[0];
+    }
+    III.n = pick.n; III.load = pick.load; III.pickOk = pick.n === III.lo.n ? III.lo.ok : III.hi.ok;
+    III.Vbody = III.Qkg * III.n / soil.rho;
+    III.tp = III.Vbody * E.p.nv.v / 100 * 60;
+    III.tg = 60 * st.L.v / st.vg.v; III.tb = 60 * st.L.v / st.vp.v;
+    III.Tc = III.tp + III.tg + st.tr.v + III.tb + st.tm.v;
+    III.Nraw = III.Tc / III.tp; III.N = Math.max(1, Math.floor(r9(III.Nraw)));
+    III.ok = true;
+  }
+  return R;
+}
+
+const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
+  aName: "", aq: "0,65", aKn: "1,20", aKr: "1,25", aKv: "0,7", aRent: "", bName: "", bq: "", bKn: "", bKr: "", bKv: "", bRent: "", nsh: "2", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
+  qcMode: "По Таблице 6", Qc: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
+  tcMode: MODE_EXT, nvMode: MODE_HOLD, q1: "0,25", q2: "2", dq: "0,05", tables: { ...TABLES_DEFAULT } };
+const clone = o => JSON.parse(JSON.stringify(o));
+const withEx = f => { const s = clone(EXAMPLE); f(s); return calc(s); };
+/* Эталоны посчитаны вручную по формулам методички */
+const REFS = [
+  ["Котлован 24 × 170 × 2,9 м, m = 0,5", () => calc(EXAMPLE).I.V, 12655.899666667, "м³"],
+  ["m по Табл. 1: глина, H = 2,9 м (до 3 м)", () => calc(EXAMPLE).I.m, 0.5, ""],
+  ["Тц при q = 0,65, угол 135° (интерполяция 0,5–1,0)", () => calc(EXAMPLE).E.a.p.tc.v, 25.2, "с"],
+  ["Нвр при q = 1,2, II группа (интерполяция 1,0–1,25)", () => withEx(s => s.aq = "1,2").E.a.p.nv.v, 2.84, ""],
+  ["Пэ при q = 0,65; Kн 1,20; Kр 1,25; Kв 0,7", () => calc(EXAMPLE).E.a.p.P, 499.2, "м³/смену"],
+  ["Пэ при q = 1,2; Kн 1,30; Kр 1,15; Kв 0,9", () => withEx(s => Object.assign(s, { aq: "1,2", aKn: "1,30", aKr: "1,15", aKv: "0,9" })).E.a.p.P, 1187.8730905, "м³/смену"],
+  ["Ковшей 0,25–2,0 м³, где условие выполнимо (глина, 135°)", () => calc(EXAMPLE).II.nOk, 0, "шт"],
+  ["Выбор: 0,65 м³ по 2000 ₽/ч и 1,0 м³ по 2500 ₽/ч — дешевле второй", () => +withEx(s => Object.assign(s, { aRent: "2000", bq: "1", bKn: "1,2", bKr: "1,25", bKv: "0,7", bRent: "2500" })).best.label.slice(-1), 2, "№"],
+  ["Стоимость аренды: 12 655,9/691,2 смены · 8 ч · 2500 ₽", () => withEx(s => Object.assign(s, { bq: "1", bKn: "1,2", bKr: "1,25", bKv: "0,7", bRent: "2500" })).E.b.cost, 366200.8005401, "₽"],
+  ["Qс по Табл. 6: q = 0,65 м³, L = 0,5 км", () => calc(EXAMPLE).III.Qc, 4.5, "т"],
+  ["Масса грунта в ковше Q = 0,65·1,2·1,25·1800", () => calc(EXAMPLE).III.Qkg, 1755, "кг"],
+  ["Принятое число ковшей (n = 2 → 78 %, n = 3 → 117 %)", () => calc(EXAMPLE).III.n, 3, "шт"],
+  ["Объём грунта в кузове 1755·3/1800", () => calc(EXAMPLE).III.Vbody, 2.925, "м³"],
+  ["Время погрузки 2,925·2,6/100 ч = 4,563 мин", () => calc(EXAMPLE).III.tp, 4.563, "мин"],
+  ["Цикл самосвала 4,563 + 1,5 + 1 + 1 + 2", () => calc(EXAMPLE).III.Tc, 10.063, "мин"],
+  ["Число самосвалов 10,063/4,563 = 2,21 → 2", () => calc(EXAMPLE).III.N, 2, "шт"],
+];
+function runRefs() { return REFS.map(([name, fn, exp, unit]) => { let got; try { got = fn(); } catch (e) { got = NaN; } return { name, exp, got, unit, ok: Number.isFinite(got) && Math.abs(got - exp) <= 1e-6 * Math.max(1, Math.abs(exp)) }; }); }
+/* ===================== /РАСЧЁТ ===================== */
+
+const KEY = "zr-kurs-v3";
+const BLANK = { ...clone(EXAMPLE), group: "СГС-312", variant: "", soil: "", c: "", d: "", H: "", L: "",
+  aName: "", aq: "", aKn: "", aKr: "", aKv: "", aRent: "", bName: "", bq: "", bKn: "", bKr: "", bKv: "", bRent: "",
+  vg: "", vp: "", tr: "", tm: "", Qc: "", mManual: "" };
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)) || clone(BLANK); } catch (e) { S = clone(BLANK); }
+Object.keys(BLANK).forEach(k => { if (S[k] === undefined) S[k] = clone(BLANK[k]); });
+Object.keys(TABLES_DEFAULT).forEach(k => { if (S.tables[k] === undefined) S.tables[k] = TABLES_DEFAULT[k]; });
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const cm = x => x.toLocaleString("ru-RU", { maximumFractionDigits: 4 });
+const kindTag = k => ({ table: '<span class="tag t">из таблицы</span>', interp: '<span class="tag i">интерполяция</span>', extrap: '<span class="tag e">вне таблицы</span>' })[k] || "";
+const note = (kind, title, text) => `<div class="note ${kind}"><b>${title}</b>${text}</div>`;
+
+function field(key, label, sym, unit, R, opts = {}) {
+  const s = R.st[key] || {}, id = "in-" + key, dim = opts.dim, bad = !dim && !!s.kind && s.kind !== "miss";
+  const ctl = opts.select
+    ? `<select id="${id}" data-k="${key}">${opts.select.map(o => `<option value="${esc(o)}"${o === S[key] ? " selected" : ""}>${o === "" ? "— выберите —" : esc(o)}</option>`).join("")}</select>`
+    : opts.text ? `<input id="${id}" data-k="${key}" value="${esc(S[key])}" autocomplete="off" class="txt" placeholder="${esc(opts.placeholder || "")}">`
+    : `<input id="${id}" data-k="${key}" value="${esc(S[key])}" inputmode="decimal" autocomplete="off">`;
+  let h = "";
+  if (bad) h = `<span class="h err">${esc(s.msg)}</span>`;
+  else if (!dim && s.kind === "miss") h = `<span class="h">${esc(s.range || opts.hint || "Не заполнено")}</span>`;
+  else if (!dim && s.warn) h = `<span class="h warn">${esc(s.warn)}</span>`;
+  else if (s.hint || opts.hint) h = `<span class="h">${esc((!dim && s.hint) || opts.hint || "")}</span>`;
+  return `<div class="f${opts.wide ? " wide" : ""}${bad ? " bad" : ""}${dim ? " dim" : ""}"><label for="${id}">${label}${sym ? `<i>${sym}</i>` : ""}</label>${ctl}${opts.wide ? "" : `<span class="u">${unit}</span>`}${h}</div>`;
+}
+function curVar() { const g = GROUPS[S.group] || []; return S.variant !== "" ? g[+S.variant] : null; }
+function fromVar(k) { const v = curVar(); if (!v) return ""; return String(v[k]) === String(S[k]).trim() ? "из варианта" : `в варианте: ${v[k]} — изменено вручную`; }
+function pickHtml() {
+  const g = GROUPS[S.group] || [];
+  return `<div class="pickrow">
+    <label for="in-group">Группа<select id="in-group">${Object.keys(GROUPS).map(n => `<option value="${esc(n)}"${n === S.group ? " selected" : ""}>${esc(n)}${GROUPS[n].length ? "" : " — вариантов пока нет"}</option>`).join("")}</select></label>
+    <label for="in-variant" class="grow">Вариант<select id="in-variant"${g.length ? "" : " disabled"}><option value="">${g.length ? "— выберите вариант —" : "для этой группы вариантов пока нет"}</option>${g.map((v, i) => `<option value="${i}"${String(i) === String(S.variant) ? " selected" : ""}>В.${i + 1} - ${esc(v.short)}</option>`).join("")}</select></label>
+    ${curVar() ? `<div class="vinfo"><b>В.${+S.variant + 1} - ${esc(curVar().short)}</b><span>котлован ${curVar().d} × ${curVar().c} × ${curVar().H} м · Lср ${curVar().L} км</span></div>` : `<div class="vinfo"><span>Выберите группу и вариант — данные котлована, грунт и дальность возки подставятся сами. Экскаватор и самосвал вы выбираете сами.</span></div>`}
+  </div>`;
+}
+function variantHtml(R) {
+  return `<div class="vhead"><h2>Исходные данные</h2><span>сохраняются в браузере</span></div>
+  <div class="group"><h3>Вариант задания${curVar() ? ` · В.${+S.variant + 1}` : ""}</h3>
+    ${field("soil", "Грунт (Таблица 3)", "", "", R, { select: ["", ...R.tb.soils.map(x => x.name)], wide: true, hint: R.soil ? `${R.soil.group} группа · средняя плотность ${fx(R.soil.rho)} кг/м³` : "" })}
+    ${field("c", "Ширина по дну", "c", "м", R, { hint: fromVar("c") })}
+    ${field("d", "Длина по дну", "d", "м", R, { hint: fromVar("d") })}
+    ${field("H", "Глубина", "H", "м", R, { hint: fromVar("H") })}
+    ${field("angle", "Угол поворота стрелы", "", "°", R, { select: Object.keys(R.tb.t4) })}
+    ${field("L", "Дальность возки", "Lср", "км", R, { hint: fromVar("L") })}
+  </div>
+${["a", "b"].map((x, i) => `<div class="group"><h3>Экскаватор ${i + 1}${R.best && R.best.x === x && R.E.a.ok && R.E.b.ok ? ' <span class="pill ok">лучший</span>' : ""}</h3>
+    ${field(x + "Name", "Марка, модель", "", "", R, { text: true, wide: true, placeholder: "например, ЭО-3323А" })}
+    ${field(x + "q", "Ёмкость ковша", "q", "м³", R, { hint: R.I.rec ? `Табл. 2 для ${fx(R.I.V, 0)} м³: ${fx(R.I.rec[2])}–${fx(R.I.rec[3])} м³` : "" })}
+    ${field(x + "Kn", "Наполнение ковша", "Kн", "", R)}
+    ${field(x + "Kr", "Разрыхление грунта", "Kр", "", R)}
+    ${field(x + "Kv", "Использование по времени", "Kв", "", R)}
+    ${field(x + "Rent", "Аренда", "", "₽/ч", R, { hint: "Для сравнения стоимости; можно не заполнять" })}
+  </div>`).join("")}
+  <div class="group"><h3>Работа экскаватора</h3>
+    ${field("nsh", "Смен в сутки", "n", "", R, { hint: "По методичке n = 2" })}
+  </div>
+  <div class="group"><h3>Автосамосвал</h3>
+    ${field("truckFor", "Считать для", "", "", R, { select: ["Лучший из двух", "Экскаватор 1", "Экскаватор 2"], wide: true, hint: R.III.E ? `сейчас: ${R.III.E.title}` : "" })}
+    ${field("qcMode", "Грузоподъёмность Qс", "", "", R, { select: ["По Таблице 6", "Ввести вручную"], wide: true })}
+    ${field("Qc", "Qс вручную", "", "т", R, { dim: S.qcMode !== "Ввести вручную" })}
+    ${field("vg", "Скорость с грузом", "Vг", "км/ч", R)}
+    ${field("vp", "Скорость порожняком", "Vп", "км/ч", R)}
+    ${field("tr", "Время разгрузки", "tр", "мин", R)}
+    ${field("tm", "Время манёвров", "tм", "мин", R)}
+    ${field("nMode", "Ковшей в кузове n", "", "", R, { select: ["Автоматически", "В меньшую сторону", "В большую сторону"], wide: true })}
+  </div>
+  <div class="group"><h3>Дополнительно</h3>
+    ${field("mMode", "Крутизна откоса m", "", "", R, { select: ["По Таблице 1", "Ввести вручную"], wide: true })}
+    ${field("mManual", "m вручную", "", "", R, { dim: S.mMode !== "Ввести вручную" })}
+    ${field("qFormula", "Масса грунта в ковше Q", "", "", R, { select: ["Как в методичке: q·Kн·Kр·ρ", "С делением на Kр (как в Пэ)"], wide: true })}
+    ${field("tcMode", "Тц вне Таблицы 4", "", "", R, { select: [MODE_EXT, MODE_HOLD, MODE_NONE], wide: true })}
+    ${field("nvMode", "Нвр вне Таблицы 5", "", "", R, { select: [MODE_EXT, MODE_HOLD, MODE_NONE], wide: true })}
+  </div>`;
+}
+
+function interpEq(r, name, q, unit) {
+  if (r.kind === "table") return `${name} = <span class="res">${cm(r.v)} ${unit}</span> ${kindTag("table")}`;
+  if (r.hold) return `${name} = <span class="res">${cm(r.v)} ${unit}</span> ${kindTag("extrap")}<span class="eq">q вне таблицы — взято крайнее значение (q = ${cm(r.seg[0][0])})</span>`;
+  const [[x1, y1], [x2, y2]] = r.seg;
+  return `${kindTag(r.kind)}<span class="eq">${name} = ${cm(y1)} + (${cm(y2)} − ${cm(y1)})·(${cm(q)} − ${cm(x1)})/(${cm(x2)} − ${cm(x1)}) = <b>${fx(r.v, 4)} ${unit}</b></span>`;
+}
+
+function sketch(I, c, d, H) {
+  if (!I.ok) return `<figure class="sketch"><svg viewBox="0 0 300 110" width="100%" role="img" aria-label="Схема появится после ввода"><text x="150" y="58" text-anchor="middle">Схема появится после ввода размеров</text></svg></figure>`;
+  const k = Math.min(200 / I.a, 90 / H), cx = 150, y0 = 24, wt = I.a * k / 2, wb = c * k / 2, h = H * k;
+  return `<figure class="sketch"><svg viewBox="0 0 300 ${y0 + h + 30}" width="100%" role="img" aria-label="Поперечный разрез котлована в масштабе">
+    <line x1="6" y1="${y0}" x2="294" y2="${y0}" stroke="var(--muted)" stroke-dasharray="4 3"/>
+    <polygon points="${cx - wt},${y0} ${cx - wb},${y0 + h} ${cx + wb},${y0 + h} ${cx + wt},${y0}" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="${cx}" y="${y0 - 8}" text-anchor="middle">a = ${fx(I.a, 2)} м</text>
+    <text x="${cx}" y="${y0 + h + 16}" text-anchor="middle">c = ${fx(c, 2)} м</text>
+    <text x="${cx + wt + 6}" y="${y0 + h / 2 + 4}">H = ${fx(H, 2)}</text>
+    ${I.m > 0 ? `<text x="${cx - wt - 6}" y="${y0 + h / 2 + 4}" text-anchor="end">1:${fx(I.m, 2)}</text>` : ""}
+  </svg><figcaption>Разрез по ширине в масштабе; штрих — поверхность земли. По длине: d = ${fx(d, 2)} м по дну, b = ${fx(I.b, 2)} м поверху.</figcaption></figure>`;
+}
+
+function partI(R) {
+  const I = R.I, st = R.st;
+  const steps = I.ok ? `<ol class="steps" id="txt-I">
+    <li><div>Крутизна откоса m = <span class="res">${cm(I.m)}</span> — ${esc(I.mSrc)}; откос 1:${cm(I.m)}</div></li>
+    <li><div>Ширина поверху: a = c + 2m·H = ${cm(st.c.v)} + 2·${cm(I.m)}·${cm(st.H.v)} = <span class="res">${fx(I.a, 3)} м</span></div></li>
+    <li><div>Длина поверху: b = d + 2m·H = ${cm(st.d.v)} + 2·${cm(I.m)}·${cm(st.H.v)} = <span class="res">${fx(I.b, 3)} м</span></div></li>
+    <li><div>Объём: V = H/6·[a·b + c·d + (a + c)·(b + d)]
+      <span class="eq">= ${cm(st.H.v)}/6·[${fx(I.a, 3)}·${fx(I.b, 3)} + ${cm(st.c.v)}·${cm(st.d.v)} + (${fx(I.a, 3)} + ${cm(st.c.v)})·(${fx(I.b, 3)} + ${cm(st.d.v)})]</span>
+      <span class="eq">= ${cm(st.H.v)}/6·[${fx(I.ab, 2)} + ${fx(I.cd, 2)} + ${fx(I.mid, 2)}] = <b>${fx(I.V, 2)} м³</b></span></div></li>
+  </ol>` : `<p class="eq">Заполните грунт, размеры котлована по дну и глубину.</p>`;
+  const notes = [];
+  if (R.st.mMode.kind) notes.push(note("err", "Таблица 1", esc(R.st.mMode.msg)));
+  if (I.rec) notes.push(note("info", "Таблица 2", `Объём ${fx(I.V, 0)} м³ — диапазон «${I.rec[4]}», рекомендуемая ёмкость ковша ${fx(I.rec[2])}–${fx(I.rec[3])} м³.`));
+  return `<section class="part"><div class="phead"><span class="roman">I</span><h2>Объём котлована</h2>${I.ok ? `<button class="copy" data-copy="txt-I" type="button">Скопировать</button>` : ""}</div>
+    <div class="grid2"><div>${steps}</div><div>${sketch(I, st.c.ok ? st.c.v : 0, st.d.ok ? st.d.v : NaN, st.H.ok ? st.H.v : 0)}</div></div>
+    ${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}</section>`;
+}
+
+function excSteps(R, E) {
+  const st = R.st, p = E.p;
+  if (!p) return `<p class="eq">${R.soil ? "Введите ёмкость ковша q и коэффициенты Kн, Kр, Kв слева." : "Сначала выберите вариант (или грунт)."}</p>`;
+  if (p.out) return note("err", "Вне таблицы", "Ковш вне Таблиц 4–5, а для этого случая выбрано «Не считать».");
+  const notes = [];
+  if (E.ok) notes.push(p.cond ? note("ok", "Условие", "Выполняется.") : note("warn", "Условие", p.low ? `Не выполняется: Пэ больше 1,5·Нвыр на ${fx((p.P / p.lim - 1) * 100, 1)} %. Выполнится при Kв от ${fx(p.KvLo, 3)} до ${fx(p.KvHi, 3)}.` : `Не выполняется: Пэ меньше Нвыр. Нужен Kв не меньше ${fx(p.KvLo, 3)}.`));
+  if (p.tc.kind === "extrap" || p.nv.kind === "extrap") notes.push(note("warn", "Вне таблицы", "Значение взято за пределами таблиц методички — согласуйте с преподавателем."));
+  if (E.recOk === false) notes.push(note("warn", "Таблица 2", `Ковш вне рекомендуемого диапазона ${fx(R.I.rec[2])}–${fx(R.I.rec[3])} м³.`));
+  return `<ol class="steps" id="txt-II-${E.x}">
+    <li><div>Цикл, Табл. 4 (угол ${esc(S.angle)}°): ${interpEq(p.tc, "Тц", p.q, "с")}</div></li>
+    <li><div>Норма времени, Табл. 5 (${R.soil.group} группа): ${interpEq(p.nv, "Нвр", p.q, "маш-ч")}</div></li>
+    ${E.ok ? `<li><div>Пэ = 3600·T/Тц · q · Kн · (1/Kр) · Kв
+      <span class="eq">= 3600·${T_SHIFT}/${fx(p.tc.v, 4)} · ${cm(p.q)} · ${cm(E.Kn)} · (1/${cm(E.Kr)}) · ${cm(E.Kv)} = <b>${fx(p.P, 1)} м³/смену</b></span></div></li>` : ""}
+    <li><div>Нвыр = 100·T/Нвр = 800/${fx(p.nv.v, 4)} = <span class="res">${fx(p.Nvyr, 1)} м³/смену</span><span class="eq">1,5·Нвыр = ${fx(p.lim, 1)} м³/смену</span></div></li>
+    ${E.ok ? `<li><div>1,5·Нвыр &gt; Пэ ≥ Нвыр: ${fx(p.lim, 1)} &gt; ${fx(p.P, 1)} ≥ ${fx(p.Nvyr, 1)} — <b>${p.cond ? "выполняется" : "не выполняется"}</b></div></li>` : ""}
+    ${Number.isFinite(E.Nsm) ? `<li><div>Nсм = Vкотл/Пэ = ${fx(R.I.V, 2)}/${fx(p.P, 1)} = <span class="res">${fx(E.Nsm, 2)} смены</span>${Number.isFinite(E.Ndn) ? `<span class="eq">Nдн = Nсм/n = ${fx(E.Nsm, 2)}/${cm(st.nsh.v)} = <b>${fx(E.Ndn, 2)} дня</b></span>` : ""}</div></li>` : ""}
+    ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 2)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
+  </ol>${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}`;
+}
+function partII(R) {
+  const II = R.II, st = R.st, A = R.E.a, B = R.E.b;
+  const card = E => `<div class="exc${R.best === E && A.ok && B.ok ? " best" : ""}"><div class="exc-h"><h3>${esc(E.title)}</h3>${R.best === E && A.ok && B.ok ? '<span class="pill ok">выбран</span>' : ""}${E.p && !E.p.out ? `<button class="copy" data-copy="txt-II-${E.x}" type="button">Скопировать</button>` : ""}</div>${excSteps(R, E)}</div>`;
+  const cell = (E, f) => E.ok ? f(E) : "—";
+  const cmp = `<div class="tbox"><table class="t cmp"><thead><tr><th>Показатель</th><th>${esc(A.title)}</th><th>${esc(B.title)}</th></tr></thead><tbody>
+    <tr><td>Ёмкость ковша q, м³</td><td>${cell(A, E => fx(E.q))}</td><td>${cell(B, E => fx(E.q))}</td></tr>
+    <tr><td>Пэ, м³/смену</td><td>${cell(A, E => fx(E.p.P, 1))}</td><td>${cell(B, E => fx(E.p.P, 1))}</td></tr>
+    <tr><td>Нвыр … 1,5·Нвыр</td><td>${cell(A, E => `${fx(E.p.Nvyr, 1)} … ${fx(E.p.lim, 1)}`)}</td><td>${cell(B, E => `${fx(E.p.Nvyr, 1)} … ${fx(E.p.lim, 1)}`)}</td></tr>
+    <tr><td>Условие производительности</td><td>${cell(A, E => E.p.cond ? "выполняется" : "нет")}</td><td>${cell(B, E => E.p.cond ? "выполняется" : "нет")}</td></tr>
+    <tr><td>Смен Nсм / дней Nдн</td><td>${cell(A, E => `${fx(E.Nsm, 2)} / ${fx(E.Ndn, 2)}`)}</td><td>${cell(B, E => `${fx(E.Nsm, 2)} / ${fx(E.Ndn, 2)}`)}</td></tr>
+    <tr><td>Аренда, ₽/ч</td><td>${cell(A, E => fx(E.rent, 2))}</td><td>${cell(B, E => fx(E.rent, 2))}</td></tr>
+    <tr><td>Аренда на весь объём, ₽</td><td>${cell(A, E => fx(E.cost, 0))}</td><td>${cell(B, E => fx(E.cost, 0))}</td></tr>
+  </tbody></table></div>`;
+  const verdict = R.best ? (A.ok && B.ok
+      ? note("ok", "Вывод", `<span id="txt-II-cmp">Принимаем ${esc(R.best.title)}: ${esc(R.bestWhy.join("; "))}.</span>`)
+      : note("info", "Вывод", `Рассчитан только ${esc(R.best.title)}. Заполните второй экскаватор, чтобы сравнить.`))
+    : note("info", "Вывод", "Заполните хотя бы один экскаватор и данные котлована.");
+  const K = II.sweepK;
+  const sup = k => k === "interp" ? "<sup>и</sup>" : k === "extrap" ? "<sup>э</sup>" : "";
+  const qs = [A, B].filter(E => E.ok).map(E => E.q);
+  const sweep = II.sweep ? `<details><summary>Перебор ковшей<span>${II.nOk ? `подходят: ${II.nOk} из ${II.sweep.length}` : `ни один из ${II.sweep.length} не подходит`}</span></summary>
+    <p class="eq">Пэ мин — при Kн ${cm(K.kn1)}, Kр ${cm(K.kr2)}, Kв ${cm(K.kv1)}; Пэ макс — при Kн ${cm(K.kn2)}, Kр ${cm(K.kr1)}, Kв ${cm(K.kv2)}. Ковш подходит, если Пэ мин &lt; 1,5·Нвыр и Пэ макс ≥ Нвыр. «Kв допуст.» — наибольший Kв при самых невыгодных Kн и Kр. <sup>и</sup> интерполяция, <sup>э</sup> вне таблицы.</p>
+    <div class="sweep-in"><label for="in-q1">q от, м³<input id="in-q1" data-k="q1" value="${esc(S.q1)}" inputmode="decimal"></label><label for="in-q2">q до, м³<input id="in-q2" data-k="q2" value="${esc(S.q2)}" inputmode="decimal"></label><label for="in-dq">шаг, м³<input id="in-dq" data-k="dq" value="${esc(S.dq)}" inputmode="decimal"></label></div>
+    <div class="tbox"><table class="t"><thead><tr><th>q, м³</th><th>Тц, с</th><th>Нвр</th><th>Нвыр</th><th>1,5·Нвыр</th><th>Пэ мин</th><th>Пэ макс</th><th>Kв допуст.</th><th>Итог</th></tr></thead><tbody>
+    ${II.sweep.map(x => x.out ? `<tr><td>${fx(x.q, 2)}</td><td colspan="8" class="noc">вне таблицы — не считается</td></tr>` : `<tr class="${x.ok ? "yes" : ""}${qs.some(q => Math.abs(x.q - q) < EPS) ? " cur" : ""}"><td>${fx(x.q, 2)}</td><td>${fx(x.tc.v, 2)}${sup(x.tc.kind)}</td><td>${fx(x.nv.v, 3)}${sup(x.nv.kind)}</td><td>${fx(x.Nvyr, 1)}</td><td>${fx(x.lim, 1)}</td><td>${fx(x.Pmin, 1)}</td><td>${fx(x.Pmax, 1)}</td><td>≤ ${fx(x.KvAllow, 3)}</td><td class="${x.ok ? "okc" : "noc"}">${x.ok ? "подходит" : x.Pmin >= x.lim ? `+${fx((x.Pmin / x.lim - 1) * 100, 0)} %` : "нет"}</td></tr>`).join("")}
+    </tbody></table></div></details>` : "";
+  return `<section class="part"><div class="phead"><span class="roman">II</span><h2>Подбор экскаватора</h2></div>
+    <div class="duo">${card(A)}${card(B)}</div>
+    <h3 class="sub">Сравнение и выбор</h3>${cmp}<div class="notes">${verdict}</div>
+    <p class="eq" style="margin-top:8px">Правило выбора: сначала — выполняется ли условие 1,5·Нвыр &gt; Пэ ≥ Нвыр; затем — меньшая стоимость аренды на весь объём (Nсм·8 ч·ставка); если ставки не введены — меньше смен.</p>
+    ${sweep}</section>`;
+}
+function partIII(R) {
+  const III = R.III, st = R.st, lk = III.lookup;
+  let body;
+  const E = III.E;
+  if (!III.ok) body = `<p class="eq">${E && E.ok ? "Заполните данные автосамосвала." : S.truckFor === "Лучший из двух" ? "Сначала нужен расчёт хотя бы одного экскаватора (раздел II)." : `Сначала рассчитайте ${S.truckFor.toLowerCase()} (раздел II).`}</p>`;
+  else {
+    const qcSrc = S.qcMode === "Ввести вручную" ? "введено вручную" : III.exact ? `Табл. 6: q = ${cm(lk.qCol)} м³, Lср = ${cm(lk.LRow)} км` : `Табл. 6, ближайшие большие: столбец q = ${cm(lk.qCol)} м³, строка Lср = ${cm(lk.LRow)} км`;
+    const opt = (o, title, cond) => `<div class="opt${o.n === III.n ? " sel" : ""}"><div class="top"><span>${title}</span><span class="pill ${o.n < 1 ? "muted" : o.ok ? "ok" : "err"}">${o.n < 1 ? "n = 0" : o.ok ? "допустимо" : "недопустимо"}</span></div>
+      <div class="big">n = ${o.n}</div><span class="eq">n·Q/Qс = ${o.n}·${fx(III.Qt, 3)}/${cm(III.Qc)} = <b>${fx(o.load, 3)}</b>, нужно ${cond}</span></div>`;
+    body = `<ol class="steps" id="txt-III">
+      <li><div>Экскаватор: <b>${esc(E.title)}</b>, q = ${cm(E.q)} м³<span class="eq">${S.truckFor === "Лучший из двух" ? "выбран как лучший в разделе II" : "выбран вручную"}</span></div></li>
+      <li><div>Грузоподъёмность автосамосвала: Qс = <span class="res">${cm(III.Qc)} т</span><span class="eq">${esc(qcSrc)}</span></div></li>
+      <li><div>Масса грунта в ковше: Q = q·Kн·${III.mul ? "Kр" : "(1/Kр)"}·ρ = ${cm(E.q)}·${cm(E.Kn)}·${III.mul ? cm(E.Kr) : `(1/${cm(E.Kr)})`}·${fx(R.soil.rho)} = <span class="res">${fx(III.Qkg, 1)} кг</span><span class="eq">= ${fx(III.Qt, 3)} т</span></div></li>
+      <li><div>Количество ковшей в кузове: n = Qс/Q = ${cm(III.Qc)}/${fx(III.Qt, 3)} = ${fx(III.nRaw, 3)} → принято <span class="res">n = ${III.n}</span><span class="eq">загрузка ${fx(III.load * 100, 1)} %; допустимо: недогруз до 10 % (≥ 0,9), перегруз до 5 % (≤ 1,05)</span></div></li>
+      <li><div>Объём грунта в кузове: V = Q·n/ρ = ${fx(III.Qkg, 1)}·${III.n}/${fx(R.soil.rho)} = <span class="res">${fx(III.Vbody, 3)} м³</span></div></li>
+      <li><div>Время погрузки: tп = V·Нвр/100 = ${fx(III.Vbody, 3)}·${fx(E.p.nv.v, 4)}/100 = ${fx(III.Vbody * E.p.nv.v / 100, 5)} маш-ч = <span class="res">${fx(III.tp, 3)} мин</span></div></li>
+      <li><div>Цикл автосамосвала: Тц = tп + 60·L/Vг + tр + 60·L/Vп + tм
+        <span class="eq">= ${fx(III.tp, 3)} + 60·${cm(st.L.v)}/${cm(st.vg.v)} + ${cm(st.tr.v)} + 60·${cm(st.L.v)}/${cm(st.vp.v)} + ${cm(st.tm.v)}</span>
+        <span class="eq">= ${fx(III.tp, 3)} + ${fx(III.tg, 3)} + ${cm(st.tr.v)} + ${fx(III.tb, 3)} + ${cm(st.tm.v)} = <b>${fx(III.Tc, 3)} мин</b></span></div></li>
+      <li><div>Требуемое количество автосамосвалов: N = Тц/tп = ${fx(III.Tc, 3)}/${fx(III.tp, 3)} = ${fx(III.Nraw, 3)} → <span class="res">N = ${III.N}</span><span class="eq">округление до ближайшего меньшего целого (по методичке)</span></div></li>
+    </ol>
+    <h3 style="font-size:14px;margin:18px 0 4px">Проверка загрузки кузова</h3>
+    <div class="choice">${opt(III.lo, "В меньшую сторону", "≥ 0,9")}${opt(III.hi, "В большую сторону", "≤ 1,05")}</div>`;
+  }
+  const notes = [];
+  if (st.qcMode.kind) notes.push(note("err", "Таблица 6", esc(st.qcMode.msg)));
+  if (III.ok && !III.exact && S.qcMode !== "Ввести вручную") notes.push(note("info", "Таблица 6", "Вашего q или Lср нет в таблице. Грузоподъёмность — это конкретные модели машин, поэтому интерполяция здесь не применяется: взяты ближайший больший столбец и строка. Можно ввести Qс вручную."));
+  if (III.ok && !III.pickOk) notes.push(note("warn", "Загрузка кузова", `Ни одно целое n не укладывается в допуски методички. Принято n = ${III.n} — ближе всего к полной загрузке.${III.mul ? " В методичке Q = q·Kн·Kр·ρ, а в формуле Пэ Kр стоит в знаменателе. Если преподаватель имел в виду деление на Kр, переключите формулу в «Дополнительно» и сравните." : ""}`));
+  return `<section class="part"><div class="phead"><span class="roman">III</span><h2>Количество автосамосвалов</h2>${III.ok ? `<button class="copy" data-copy="txt-III" type="button">Скопировать</button>` : ""}</div>
+    ${body}${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}</section>`;
+}
+
+function partTables(R) {
+  const ta = (k, title, hint) => `<div><label for="in-tab-${k}">${title}</label><textarea class="tab" id="in-tab-${k}" data-tab="${k}" spellcheck="false">${esc(S.tables[k])}</textarea>
+    <div class="h${R.tabErr[k] ? " err" : ""}">${esc(R.tabErr[k] || hint)}</div></div>`;
+  const refs = runRefs(), nOk = refs.filter(x => x.ok).length;
+  return `<section class="part"><div class="phead"><span class="roman">Т</span><h2>Таблицы методички и контрольные примеры</h2><span class="pill ${nOk === refs.length ? "ok" : "err"}">эталоны ${nOk} из ${refs.length}</span></div>
+    <details><summary>Таблицы 1, 3, 4, 5, 6<span>уже заполнены по методичке; можно заменить, вставив строки из Excel</span></summary>
+      <div class="tabs-grid">
+        ${ta("t13", "Таблицы 1 и 3: грунты", "грунт; группа; ρ; Kн от; Kн до; Kр от; Kр до; m до 1,5 м; m до 3 м; m до 5 м")}
+        ${ta("t4", "Таблица 4: Тц, с", "угол; q; Тц. Для 90° в методичке строка «1,0 — 32» — принято 2,0 м³")}
+        ${ta("t5", "Таблица 5: Нвр, маш-ч на 100 м³", "q; I; II; III. Строка «0,63–0,65» принята как 0,65")}
+        ${ta("t6", "Таблица 6: грузоподъёмность, т", "первая строка: L; ёмкости ковша; далее L; значения («–» — нет)")}
+      </div>
+      <p style="margin:10px 0 0"><button class="btn" id="b-tables" type="button">Вернуть таблицы методички</button></p>
+    </details>
+    <details><summary>Контрольные примеры<span>посчитаны вручную и не зависят от вашего ввода</span></summary>
+      <div class="tbox"><table class="t"><thead><tr><th>Пример</th><th>Эталон</th><th>Приложение</th><th></th></tr></thead><tbody>
+      ${refs.map(x => `<tr><td style="font-family:var(--ui);white-space:normal">${esc(x.name)}</td><td>${fx(x.exp, 4)} ${x.unit}</td><td>${fx(x.got, 4)}</td><td class="${x.ok ? "okc" : "noc"}">${x.ok ? "совпадает" : "ОШИБКА"}</td></tr>`).join("")}
+      </tbody></table></div></details></section>`;
+}
+
+function ticket(R) {
+  if (!R.I.ok && !curVar()) return `<div class="ticket"><div class="kpi" style="grid-column:1/-1"><div class="l">Начните с варианта</div><div class="n" style="font-size:20px;white-space:normal;font-family:var(--ui)">Выберите группу и вариант вверху, затем экскаваторы и самосвал слева</div></div></div>`;
+  const I = R.I, B = R.best, III = R.III;
+  const condPill = B ? (B.p.cond ? '<span class="pill ok">условие выполнено</span>' : '<span class="pill warn">условие не выполнено</span>') : '<span class="pill muted">нет данных</span>';
+  return `<div class="ticket">
+    <div class="kpi"><div class="l">Объём котлована</div><div class="n">${fx(I.V, 1)}<small>м³</small></div><div class="s">${I.ok ? `поверху ${fx(I.a, 2)} × ${fx(I.b, 2)} м` : "—"}</div></div>
+    <div class="kpi"><div class="l">${B ? esc(B.title) : "Экскаватор"}</div><div class="n">${fx(B ? B.p.P : NaN, 1)}<small>м³/см</small></div><div class="s">${condPill}</div></div>
+    <div class="kpi"><div class="l">Продолжительность</div><div class="n">${fx(B ? B.Ndn : NaN, 1)}<small>дня</small></div><div class="s">${B ? `${fx(B.Nsm, 1)} смены${Number.isFinite(B.cost) ? ` · ${fx(B.cost, 0)} ₽` : ""}` : "—"}</div></div>
+    <div class="kpi"><div class="l">Автосамосвалы${III.ok ? ` по ${cm(III.Qc)} т` : ""}</div><div class="n">${III.ok ? III.N : "—"}<small>шт</small></div><div class="s">${III.ok ? `для ${esc(III.E.label.toLowerCase())}, по ${III.n} ковша` : "—"}</div></div>
+  </div>`;
+}
+function render() {
+  const R = calc(S);
+  const ae = document.activeElement, fid = ae && ae.id, sel = ae && ae.selectionStart;
+  const open = [...document.querySelectorAll("#report details")].map(d => d.open);
+  $("pick").innerHTML = pickHtml();
+  $("in-group").onchange = e => { S.group = e.target.value; S.variant = ""; save(); render(); };
+  $("in-variant").onchange = e => { S.variant = e.target.value; const v = curVar(); if (v) { S.c = v.c; S.d = v.d; S.H = v.H; S.L = v.L; S.soil = v.soil; } save(); render(); };
+  $("variant").innerHTML = variantHtml(R);
+  $("report").innerHTML = ticket(R) + partI(R) + partII(R) + partIII(R) + partTables(R) +
+    `<p class="foot">Формулы и таблицы — по методичке курсовой «Технология производства земляных работ». Ввод хранится только в этом браузере.</p>`;
+  [...document.querySelectorAll("#report details")].forEach((d, i) => { if (open[i]) d.open = true; });
+  document.querySelectorAll("[data-k]").forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => { S[el.dataset.k] = el.value; save(); render(); }));
+  document.querySelectorAll("[data-tab]").forEach(el => {
+    el.addEventListener("input", () => { S.tables[el.dataset.tab] = el.value; save(); render(); });
+    el.addEventListener("keydown", e => { if (e.key === "Tab") { e.preventDefault(); const a = el.selectionStart; el.value = el.value.slice(0, a) + "\t" + el.value.slice(el.selectionEnd); el.selectionStart = el.selectionEnd = a + 1; el.dispatchEvent(new Event("input")); } });
+  });
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copy($(b.dataset.copy).innerText));
+  const bt = $("b-tables"); if (bt) bt.onclick = () => { S.tables = { ...TABLES_DEFAULT }; save(); render(); };
+  if (fid && $(fid)) { const el = $(fid); el.focus(); try { if (typeof sel === "number") el.setSelectionRange(sel, sel); } catch (e) {} }
+}
+function toast(ok, text) { const t = $("toast"); t.hidden = false; t.className = "toast" + (ok ? "" : " bad"); t.textContent = text; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 2500); }
+function copy(text) {
+  try { navigator.clipboard.writeText(text).then(() => toast(true, "Скопировано"), () => toast(false, "Не удалось — выделите текст вручную")); }
+  catch (e) { toast(false, "Не удалось — выделите текст вручную"); }
+}
+$("b-clear").onclick = () => { const t = S.tables, g = S.group; S = clone(BLANK); S.tables = t; S.group = g; save(); render(); };
+$("b-copyall").onclick = () => {
+  const R = calc(S);
+  const names = { "txt-I": "I. Объём котлована", "txt-II-a": `II. ${R.E.a.title}`, "txt-II-b": `II. ${R.E.b.title}`, "txt-II-cmp": "Выбор экскаватора", "txt-III": "III. Количество автосамосвалов" };
+  const parts = Object.keys(names).map(id => $(id) ? `${names[id]}\n${$(id).innerText}` : "").filter(Boolean);
+  if (!parts.length) { toast(false, "Пока нечего копировать"); return; }
+  copy(parts.join("\n\n"));
+};
+render();
+</script>
+</body>
+</html>
