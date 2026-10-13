@@ -73,6 +73,10 @@ ul.checks li.warn span { background: var(--warn-bg); color: var(--warn) } ul.che
 .dl > div:first-child { display: flex; flex-direction: column; min-width: 0; flex: 1 1 280px } .dl span { font-size: 13px; color: var(--muted) }
 .dl-b { display: flex; gap: 8px; flex-wrap: wrap }
 section.final .roman { background: var(--ink); color: var(--panel) }
+.fits { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px }
+.fit { border: 1px solid var(--ok); background: var(--ok-bg); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; font-size: 13px }
+.fit.ext { border-color: var(--warn); background: var(--warn-bg) } .fit .extn { color: var(--warn); font-weight: 600 }
+.fit b { font-family: var(--mono); font-size: 17px; font-weight: 500 } .fit span { color: var(--muted) }
 .duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
 .exc { border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0 }
 .exc.best { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok) }
@@ -451,6 +455,20 @@ function calc(S) {
         II.sweep.push(p);
       }
       II.nOk = II.sweep.filter(x => x.ok).length;
+      const k = st.Kn.ok && st.Kr.ok ? st.Kn.v / st.Kr.v : null;
+      II.sweep.forEach(p => {
+        if (p.out) return;
+        p.okTab = p.tc.kind !== "extrap" && p.nv.kind !== "extrap";
+        p.okT2 = I.rec ? p.q >= I.rec[2] - EPS && p.q <= I.rec[3] + EPS : true;
+        p.fit = !!(p.ok && p.okT2);
+        if (p.fit && D && I.ok && st.nsh.ok) {
+          p.Plo = Math.max(p.Pmin, p.Nvyr, I.V / (D[1] * st.nsh.v)); p.Phi = Math.min(p.Pmax, p.lim, I.V / (D[0] * st.nsh.v));
+          if (k) { const lo = Math.max(p.Plo / (p.base * k), RANGES.Kv[0]), hi = Math.min(p.Phi / (p.base * k), RANGES.Kv[1]); p.KvFit = lo <= hi + EPS ? [lo, hi] : null; }
+        }
+      });
+      II.fits = II.sweep.filter(x => x.fit);
+      const pool = II.sweep.filter(x => !x.out && x.okT2);
+      II.why = { n: pool.length, p: pool.filter(x => !x.okP).length, d: pool.filter(x => x.okD === false).length, both: pool.filter(x => x.okP && x.okD !== false && !x.ok).length };
     }
   }
 
@@ -515,6 +533,8 @@ const REFS = [
   ["Стоимость аренды: 12 655,9/691,2 смены · 8 ч · 2500 ₽", () => withEx(s => Object.assign(s, { bq: "1", bRent: "2500" })).E.b.cost, 366200.8005401, "₽"],
   ["Срок: q = 0,65 м³, Nдн = 12,68 — в пределах 10–20 дней (1 = да)", () => +calc(EXAMPLE).E.a.daysOk, 1, ""],
   ["Срок: q = 1,6 м³, Nдн = 6,7 — вне 10–20 дней (0 = нет)", () => +withEx(s => s.aq = "1,6").E.a.daysOk, 0, ""],
+  ["Подходящих объёмов ковша для варианта 21 (глина, 12 656 м³)", () => calc(EXAMPLE).II.fits.length, 0, "шт"],
+  ["В.10 (песок, 10 311 м³): ковш 1,0 м³ подходит, нижняя граница Пэ = 28800/28·0,8/1,2·0,7", () => { const v = GROUPS["СГС-312"][9]; const R = withEx(s => Object.assign(s, { soil: v.soil, c: v.c, d: v.d, H: v.H, L: v.L })); const x = R.II.fits.find(f => Math.abs(f.q - 1) < 1e-9); return x ? x.Plo : NaN; }, 480, "м³/смену"],
   ["Qс по Табл. 6: q = 0,65 м³, L = 0,5 км", () => calc(EXAMPLE).III.Qc, 4.5, "т"],
   ["Масса грунта в ковше Q = 0,65·1,2·1,25·1800", () => calc(EXAMPLE).III.Qkg, 1755, "кг"],
   ["Принятое число ковшей (n = 2 → 78 %, n = 3 → 117 %)", () => calc(EXAMPLE).III.n, 3, "шт"],
@@ -665,6 +685,28 @@ function excSteps(R, E) {
     ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 4)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
   </ol>${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}`;
 }
+function partFit(R) {
+  const II = R.II, I = R.I;
+  if (!II.sweep || !I.ok) return `<section class="part"><div class="phead"><span class="roman">q</span><h2>Подходящие объёмы ковша</h2></div><p class="eq">Появятся после выбора варианта (нужны грунт, размеры котлована и глубина).</p></section>`;
+  const D = R.D, w = II.why, K = II.sweepK;
+  const conds = `Проверены ковши от ${fx(num(S.q1).v)} до ${fx(num(S.q2).v)} м³ с шагом ${fx(num(S.dq).v)} м³ (меняется в переборе раздела II). Условия: ковш по Таблице 2 ${I.rec ? `(${fx(I.rec[2])}–${fx(I.rec[3])} м³)` : ""}; 1,5·Нвыр &gt; Пэ ≥ Нвыр при Kн ${fx(K.kn1)}–${fx(K.kn2)}, Kр ${fx(K.kr1)}–${fx(K.kr2)}, Kв 0,7–0,9; срок ${D ? `${fx(D[0])}–${fx(D[1])}` : "—"} дней.`;
+  let body;
+  if (II.fits.length) {
+    body = `<div class="fits">${II.fits.map(x => `<div class="fit${x.okTab ? "" : " ext"}"><b>${fx(x.q, 2)} м³</b>${x.okTab ? "" : `<span class="extn">Тц или Нвр вне Таблиц 4–5 — согласуйте</span>`}<span>Пэ ${fx(x.Plo, 0)}–${fx(x.Phi, 0)} м³/смену</span>${x.KvFit !== undefined ? `<span>${x.KvFit ? `при ваших Kн, Kр: Kв ${fx(x.KvFit[0], 2)}–${fx(x.KvFit[1], 2)}` : "при ваших Kн, Kр не подходит"}</span>` : ""}</div>`).join("")}</div>
+      <p class="eq" style="margin-top:8px">Подходят: ${II.fits.map(x => fx(x.q, 2)).join("; ")} м³. Пэ — диапазон, при котором выполняются оба условия.${II.fits.some(x => !x.okTab) ? " Для отмеченных оранжевым ковшей значения Тц или Нвр получены за пределами таблиц методички." : ""}</p>`;
+  } else {
+    const r = [];
+    if (w.n === 0) r.push("в диапазоне перебора нет ковшей из Таблицы 2");
+    else {
+      if (w.p) r.push(`условие производительности невыполнимо у ${w.p} из ${w.n}`);
+      if (w.d) r.push(`срок ${D ? `${fx(D[0])}–${fx(D[1])}` : ""} дней невыполним у ${w.d} из ${w.n}`);
+      if (w.both) r.push(`у ${w.both} из ${w.n} условия по отдельности выполнимы, но не одновременно`);
+    }
+    body = note("warn", "Результат", `Ни один объём ковша не подходит. ${r.length ? "Среди ковшей по Таблице 2: " + r.join("; ") + "." : ""}`);
+  }
+  return `<section class="part"><div class="phead"><span class="roman">q</span><h2>Подходящие объёмы ковша</h2>${II.fits.length ? `<span class="pill ok">подходят: ${II.fits.length}</span>` : '<span class="pill warn">не подходит ни один</span>'}</div>
+    <p class="eq" style="margin-bottom:10px">${conds}</p>${body}</section>`;
+}
 function partII(R) {
   const II = R.II, st = R.st, A = R.E.a, B = R.E.b;
   const card = E => `<div class="exc${R.best === E && A.ok && B.ok ? " best" : ""}"><div class="exc-h"><h3>${esc(E.title)}</h3>${R.best === E && A.ok && B.ok ? '<span class="pill ok">выбран</span>' : ""}${E.p && !E.p.out ? `<button class="copy" data-copy="txt-II-${E.x}" type="button">Скопировать</button>` : ""}</div>${excSteps(R, E)}</div>`;
@@ -799,6 +841,10 @@ function reportModel(R) {
     if (I.rec) P(`По Таблице 2 для объёма ${n(I.V, 0)} м³ (диапазон ${I.rec[4]} м³) рекомендуемая вместимость ковша ${n(I.rec[2])}–${n(I.rec[3])} м³.`);
   } else P("Недостаточно данных.");
 
+  if (R.II.sweep && I.ok) {
+    P(R.II.fits.length ? `Подходящие объёмы ковша (выполняются Таблица 2, условие 1,5·Нвыр > Пэ ≥ Нвыр при коэффициентах из диапазонов методички и срок ${R.D ? `${n(R.D[0])}–${n(R.D[1])}` : ""} дней): ${R.II.fits.map(x => n(x.q, 2)).join("; ")} м³.`
+      : `Проверка объёмов ковша от ${n(num(S.q1).v)} до ${n(num(S.q2).v)} м³: ни один объём не удовлетворяет одновременно Таблице 2, условию 1,5·Нвыр > Пэ ≥ Нвыр при коэффициентах из диапазонов методички и сроку ${R.D ? `${n(R.D[0])}–${n(R.D[1])}` : ""} дней.`);
+  }
   H("II. Подбор экскаватора");
   ["a", "b"].forEach(x => {
     const E = R.E[x];
@@ -987,7 +1033,7 @@ function render() {
   $("in-group").onchange = e => { S.group = e.target.value; S.variant = ""; save(); render(); };
   $("in-variant").onchange = e => { S.variant = e.target.value; const v = curVar(); if (v) { S.c = v.c; S.d = v.d; S.H = v.H; S.L = v.L; S.soil = v.soil; } save(); render(); };
   $("variant").innerHTML = variantHtml(R);
-  $("report").innerHTML = ticket(R) + partI(R) + partII(R) + partIII(R) + partFinal(R) + partTables(R) +
+  $("report").innerHTML = ticket(R) + partI(R) + partFit(R) + partII(R) + partIII(R) + partFinal(R) + partTables(R) +
     `<p class="foot">Формулы и таблицы — по методичке курсовой «Технология производства земляных работ». Ввод хранится только в этом браузере.</p>`;
   [...document.querySelectorAll("#report details")].forEach((d, i) => { if (open[i]) d.open = true; });
   document.querySelectorAll("[data-k]").forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => { S[el.dataset.k] = el.value; save(); render(); }));
