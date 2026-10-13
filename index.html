@@ -345,6 +345,9 @@ function calc(S) {
     st[x + "Rent"] = String(S[x + "Rent"] || "").trim() === "" ? { ok: true, empty: true } : pos(S[x + "Rent"], "Ставка больше 0");
   });
   st.nsh = intge1(S.nsh);
+  st.dmin = pos(S.dmin, "Больше 0"); st.dmax = pos(S.dmax, "Больше 0");
+  if (st.dmin.ok && st.dmax.ok && st.dmax.v < st.dmin.v) st.dmax = { kind: "err", msg: "«до» меньше «от»" };
+  const D = st.dmin.ok && st.dmax.ok ? [st.dmin.v, st.dmax.v] : null; R.D = D;
   st.vg = pos(S.vg); st.vp = pos(S.vp); st.tr = nonneg(S.tr); st.tm = nonneg(S.tm);
   st.Qc = S.qcMode === "Ввести вручную" ? pos(S.Qc, "Грузоподъёмность больше 0") : { ok: true, unused: true };
   R.soil = soil;
@@ -394,6 +397,14 @@ function calc(S) {
           if (st[x + "Rent"].ok && !st[x + "Rent"].empty) { E.rent = st[x + "Rent"].v; E.cost = E.Nsm * T_SHIFT * E.rent; }
         }
         E.ok = true; E.q = sq.v; E.Kn = sn.v; E.Kr = sr.v; E.Kv = sv.v;
+        if (D && Number.isFinite(E.Ndn)) {
+          E.daysOk = E.Ndn >= D[0] - EPS && E.Ndn <= D[1] + EPS;
+          const Pd1 = I.V / (D[1] * st.nsh.v), Pd2 = I.V / (D[0] * st.nsh.v); // Пэ, при которой Nдн = D[1] … D[0]
+          E.KvDays = [Pd1 / (p.base * k), Pd2 / (p.base * k)];
+          const lo = Math.max(p.KvLo, E.KvDays[0]), hi = Math.min(p.KvHi, E.KvDays[1]);
+          E.KvBoth = lo < hi - EPS ? [lo, hi] : null;
+        }
+        E.allOk = p.cond && E.daysOk !== false;
       }
       if (I.rec) E.recOk = sq.v >= I.rec[2] - EPS && sq.v <= I.rec[3] + EPS;
     }
@@ -401,16 +412,20 @@ function calc(S) {
   // выбор лучшего: сначала условие 1,5·Нвыр > Пэ ≥ Нвыр, затем стоимость аренды за весь объём, затем число смен
   const cands = ["a", "b"].map(x => R.E[x]).filter(E => E.ok && Number.isFinite(E.Nsm));
   if (cands.length) {
-    const condOk = cands.filter(E => E.p.cond), pool = condOk.length ? condOk : cands;
+    const score = E => (E.p.cond ? 1 : 0) + (E.daysOk ? 1 : 0), top = Math.max(...cands.map(score));
+    const condOk = cands.filter(E => score(E) === top), pool = condOk;
     const haveCost = pool.every(E => Number.isFinite(E.cost));
     const sorted = pool.slice().sort((u, v) => (haveCost ? u.cost - v.cost : 0) || u.Nsm - v.Nsm);
     const best = R.best = sorted[0], other = cands.find(E => E !== best);
     const why = [];
     if (!other) why.push("рассчитан только он");
     else {
-      if (condOk.length === 1) why.push("только у него выполняется условие 1,5·Нвыр > Пэ ≥ Нвыр");
-      else if (!condOk.length) why.push("условие производительности не выполняется ни у одного");
-      if (condOk.length !== 1 || pool.length > 1) {
+      const sb = score(best), so = score(other);
+      const condText = E => [E.p.cond ? "условие 1,5·Нвыр > Пэ ≥ Нвыр" : null, E.daysOk ? `срок ${D ? `${fx(D[0])}–${fx(D[1])}` : ""} дней` : null].filter(Boolean).join(" и ");
+      if (sb > so) why.push(`выполняется больше условий: ${condText(best) || "—"}${so ? ` (у другого — только ${condText(other)})` : " (у другого — ни одного)"}`);
+      else if (sb === 0) why.push(`условие производительности и срок ${D ? `${fx(D[0])}–${fx(D[1])}` : ""} дней не выполняются ни у одного`);
+      else if (sb === 1 && !(best.p.cond === other.p.cond)) why.push("у обоих выполняется только одно из двух условий");
+      if (pool.length > 1) {
         if (haveCost && Number.isFinite(other.cost) && Math.abs(best.cost - other.cost) > 0.5) why.push(`аренда на весь объём дешевле: ${fx(best.cost, 0)} ₽ против ${fx(other.cost, 0)} ₽`);
         else why.push(`меньше смен на весь объём: ${fx(best.Nsm, 2)} против ${fx(other.Nsm, 2)}${haveCost ? "" : " (ставки аренды не введены)"}`);
       }
@@ -424,7 +439,15 @@ function calc(S) {
       II.sweep = [];
       for (let i = 0; i <= Math.floor(r9((q2 - q1) / dq)); i++) {
         const q = Math.round((q1 + i * dq) * 1e6) / 1e6, p = point(q);
-        if (!p.out) { p.Pmin = p.base * K.kn1 / K.kr2 * K.kv1; p.Pmax = p.base * K.kn2 / K.kr1 * K.kv2; p.ok = p.Pmin < p.lim - EPS && p.Pmax >= p.Nvyr - EPS; p.KvAllow = p.lim / (p.base * K.kn1 / K.kr2); }
+        if (!p.out) {
+          p.Pmin = p.base * K.kn1 / K.kr2 * K.kv1; p.Pmax = p.base * K.kn2 / K.kr1 * K.kv2; p.okP = p.Pmin < p.lim - EPS && p.Pmax >= p.Nvyr - EPS; p.KvAllow = p.lim / (p.base * K.kn1 / K.kr2);
+          if (D && I.ok && st.nsh.ok) {
+            p.dMax = I.V / (p.Pmin * st.nsh.v); p.dMin = I.V / (p.Pmax * st.nsh.v);
+            const lo = Math.max(p.Pmin, p.Nvyr, I.V / (D[1] * st.nsh.v)), hi = Math.min(p.Pmax, I.V / (D[0] * st.nsh.v));
+            p.okD = p.dMin <= D[1] + EPS && p.dMax >= D[0] - EPS;
+            p.ok = lo <= hi + EPS && lo < p.lim - EPS;
+          } else p.ok = p.okP;
+        }
         II.sweep.push(p);
       }
       II.nOk = II.sweep.filter(x => x.ok).length;
@@ -473,7 +496,7 @@ function calc(S) {
 }
 
 const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
-  Kn: "1,20", Kr: "1,25", Kv: "0,7", aName: "", aq: "0,65", aRent: "", bName: "", bq: "", bRent: "", nsh: "2", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
+  Kn: "1,20", Kr: "1,25", Kv: "0,7", aName: "", aq: "0,65", aRent: "", bName: "", bq: "", bRent: "", nsh: "2", dmin: "10", dmax: "20", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
   qcMode: "По Таблице 6", Qc: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
   tcMode: MODE_EXT, nvMode: MODE_HOLD, q1: "0,25", q2: "2", dq: "0,05", tables: { ...TABLES_DEFAULT } };
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -487,8 +510,11 @@ const REFS = [
   ["Пэ при q = 0,65; Kн 1,20; Kр 1,25; Kв 0,7", () => calc(EXAMPLE).E.a.p.P, 499.2, "м³/смену"],
   ["Пэ при q = 1,2; Kн 1,30; Kр 1,15; Kв 0,9", () => withEx(s => Object.assign(s, { aq: "1,2", Kn: "1,30", Kr: "1,15", Kv: "0,9" })).E.a.p.P, 1187.8730905, "м³/смену"],
   ["Ковшей 0,25–2,0 м³, где условие выполнимо (глина, 135°)", () => calc(EXAMPLE).II.nOk, 0, "шт"],
-  ["Выбор: 0,65 м³ по 2000 ₽/ч и 1,0 м³ по 2500 ₽/ч — дешевле второй", () => +withEx(s => Object.assign(s, { aRent: "2000", bq: "1", bRent: "2500" })).best.label.slice(-1), 2, "№"],
+  ["Выбор: 0,65 м³ (12,7 дн) и 1,0 м³ (9,2 дн, вне срока) — принят первый, хотя второй дешевле", () => +withEx(s => Object.assign(s, { aRent: "2000", bq: "1", bRent: "2500" })).best.label.slice(-1), 1, "№"],
+  ["Выбор: 0,65 м³ по 2000 ₽/ч и 0,5 м³ по 1500 ₽/ч (оба в сроке) — дешевле второй", () => +withEx(s => Object.assign(s, { aRent: "2000", bq: "0,5", bRent: "1500" })).best.label.slice(-1), 2, "№"],
   ["Стоимость аренды: 12 655,9/691,2 смены · 8 ч · 2500 ₽", () => withEx(s => Object.assign(s, { bq: "1", bRent: "2500" })).E.b.cost, 366200.8005401, "₽"],
+  ["Срок: q = 0,65 м³, Nдн = 12,68 — в пределах 10–20 дней (1 = да)", () => +calc(EXAMPLE).E.a.daysOk, 1, ""],
+  ["Срок: q = 1,6 м³, Nдн = 6,7 — вне 10–20 дней (0 = нет)", () => +withEx(s => s.aq = "1,6").E.a.daysOk, 0, ""],
   ["Qс по Табл. 6: q = 0,65 м³, L = 0,5 км", () => calc(EXAMPLE).III.Qc, 4.5, "т"],
   ["Масса грунта в ковше Q = 0,65·1,2·1,25·1800", () => calc(EXAMPLE).III.Qkg, 1755, "кг"],
   ["Принятое число ковшей (n = 2 → 78 %, n = 3 → 117 %)", () => calc(EXAMPLE).III.n, 3, "шт"],
@@ -500,7 +526,7 @@ const REFS = [
 function runRefs() { return REFS.map(([name, fn, exp, unit]) => { let got; try { got = fn(); } catch (e) { got = NaN; } return { name, exp, got, unit, ok: Number.isFinite(got) && Math.abs(got - exp) <= 1e-6 * Math.max(1, Math.abs(exp)) }; }); }
 /* ===================== /РАСЧЁТ ===================== */
 
-const KEY = "zr-kurs-v4";
+const KEY = "zr-kurs-v5";
 const BLANK = { ...clone(EXAMPLE), group: "СГС-312", variant: "", soil: "", c: "", d: "", H: "", L: "",
   Kn: "", Kr: "", Kv: "", aName: "", aq: "", aRent: "", bName: "", bq: "", bRent: "",
   vg: "", vp: "", tr: "", tm: "", Qc: "", mManual: "" };
@@ -570,6 +596,8 @@ function variantHtml(R) {
     ${field("nMode", "Ковшей в кузове n", "", "", R, { select: ["Автоматически", "В меньшую сторону", "В большую сторону"], wide: true })}
   </div>
   <div class="group"><h3>Дополнительно</h3>
+    ${field("dmin", "Срок работы экскаватора от", "", "дн", R, { hint: "Требование преподавателя: 10–20 дней" })}
+    ${field("dmax", "Срок работы экскаватора до", "", "дн", R)}
     ${field("mMode", "Крутизна откоса m", "", "", R, { select: ["По Таблице 1", "Ввести вручную"], wide: true })}
     ${field("mManual", "m вручную", "", "", R, { dim: S.mMode !== "Ввести вручную" })}
     ${field("qFormula", "Масса грунта в ковше Q", "", "", R, { select: ["Как в методичке: q·Kн·Kр·ρ", "С делением на Kр (как в Пэ)"], wide: true })}
@@ -622,6 +650,8 @@ function excSteps(R, E) {
   if (p.out) return note("err", "Вне таблицы", "Ковш вне Таблиц 4–5, а для этого случая выбрано «Не считать».");
   const notes = [];
   if (E.ok) notes.push(p.cond ? note("ok", "Условие", "Выполняется.") : note("warn", "Условие", p.low ? `Не выполняется: Пэ больше 1,5·Нвыр на ${fx((p.P / p.lim - 1) * 100, 1)} %. Выполнится при Kв от ${fx(p.KvLo, 3)} до ${fx(p.KvHi, 3)}.` : `Не выполняется: Пэ меньше Нвыр. Нужен Kв не меньше ${fx(p.KvLo, 3)}.`));
+  if (E.daysOk !== undefined) notes.push(E.daysOk ? note("ok", "Срок", `Nдн = ${fx(E.Ndn, 2)} — в пределах ${fx(R.D[0])}–${fx(R.D[1])} дней.`) : note("warn", "Срок", `Nдн = ${fx(E.Ndn, 2)} — вне пределов ${fx(R.D[0])}–${fx(R.D[1])} дней. По сроку подходит Kв от ${fx(E.KvDays[0], 3)} до ${fx(E.KvDays[1], 3)}.`));
+  if (E.ok && !E.allOk && E.KvDays) notes.push(E.KvBoth ? note("info", "Оба условия", `Производительность и срок выполняются одновременно при Kв от ${fx(E.KvBoth[0], 3)} до ${fx(E.KvBoth[1], 3)}${E.KvBoth[1] < RANGES.Kv[0] || E.KvBoth[0] > RANGES.Kv[1] ? " — вне диапазона методички 0,7–0,9" : ""}.`) : note("info", "Оба условия", "При этих Kн и Kр нет Kв, при котором одновременно выполняются условие производительности и срок."));
   if (p.tc.kind === "extrap" || p.nv.kind === "extrap") notes.push(note("warn", "Вне таблицы", "Значение взято за пределами таблиц методички — согласуйте с преподавателем."));
   if (E.recOk === false) notes.push(note("warn", "Таблица 2", `Ковш вне рекомендуемого диапазона ${fx(R.I.rec[2])}–${fx(R.I.rec[3])} м³.`));
   return `<ol class="steps" id="txt-II-${E.x}">
@@ -631,7 +661,7 @@ function excSteps(R, E) {
       <span class="eq">= 3600·${T_SHIFT}/${fx(p.tc.v, 4)} · ${cm(p.q)} · ${cm(E.Kn)} · (1/${cm(E.Kr)}) · ${cm(E.Kv)} = <b>${fx(p.P, 1)} м³/смену</b></span></div></li>` : ""}
     <li><div>Нвыр = 100·T/Нвр = 800/${fx(p.nv.v, 4)} = <span class="res">${fx(p.Nvyr, 1)} м³/смену</span><span class="eq">1,5·Нвыр = ${fx(p.lim, 1)} м³/смену</span></div></li>
     ${E.ok ? `<li><div>1,5·Нвыр &gt; Пэ ≥ Нвыр: ${fx(p.lim, 1)} &gt; ${fx(p.P, 1)} ≥ ${fx(p.Nvyr, 1)} — <b>${p.cond ? "выполняется" : "не выполняется"}</b></div></li>` : ""}
-    ${Number.isFinite(E.Nsm) ? `<li><div>Nсм = Vкотл/Пэ = ${fx(R.I.V, 2)}/${fx(p.P, 1)} = <span class="res">${fx(E.Nsm, 2)} смены</span>${Number.isFinite(E.Ndn) ? `<span class="eq">Nдн = Nсм/n = ${fx(E.Nsm, 2)}/${cm(st.nsh.v)} = <b>${fx(E.Ndn, 2)} дня</b></span>` : ""}</div></li>` : ""}
+    ${Number.isFinite(E.Nsm) ? `<li><div>Nсм = Vкотл/Пэ = ${fx(R.I.V, 2)}/${fx(p.P, 1)} = <span class="res">${fx(E.Nsm, 2)} смены</span>${Number.isFinite(E.Ndn) ? `<span class="eq">Nдн = Nсм/n = ${fx(E.Nsm, 2)}/${cm(st.nsh.v)} = <b>${fx(E.Ndn, 2)} дня</b>${E.daysOk === undefined ? "" : E.daysOk ? ` — в пределах ${fx(R.D[0])}–${fx(R.D[1])}` : ` — вне пределов ${fx(R.D[0])}–${fx(R.D[1])}`}</span>` : ""}</div></li>` : ""}
     ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 4)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
   </ol>${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}`;
 }
@@ -645,6 +675,7 @@ function partII(R) {
     <tr><td>Нвыр … 1,5·Нвыр</td><td>${cell(A, E => `${fx(E.p.Nvyr, 1)} … ${fx(E.p.lim, 1)}`)}</td><td>${cell(B, E => `${fx(E.p.Nvyr, 1)} … ${fx(E.p.lim, 1)}`)}</td></tr>
     <tr><td>Условие производительности</td><td>${cell(A, E => E.p.cond ? "выполняется" : "нет")}</td><td>${cell(B, E => E.p.cond ? "выполняется" : "нет")}</td></tr>
     <tr><td>Смен Nсм / дней Nдн</td><td>${cell(A, E => `${fx(E.Nsm, 2)} / ${fx(E.Ndn, 2)}`)}</td><td>${cell(B, E => `${fx(E.Nsm, 2)} / ${fx(E.Ndn, 2)}`)}</td></tr>
+    <tr><td>Срок ${R.D ? `${fx(R.D[0])}–${fx(R.D[1])}` : ""} дней</td><td>${cell(A, E => E.daysOk === undefined ? "—" : E.daysOk ? "выполняется" : "нет")}</td><td>${cell(B, E => E.daysOk === undefined ? "—" : E.daysOk ? "выполняется" : "нет")}</td></tr>
     <tr><td>Аренда, ₽/ч</td><td>${cell(A, E => fx(E.rent, 2))}</td><td>${cell(B, E => fx(E.rent, 2))}</td></tr>
     <tr><td>Аренда на весь объём, ₽</td><td>${cell(A, E => fx(E.cost, 0))}</td><td>${cell(B, E => fx(E.cost, 0))}</td></tr>
   </tbody></table></div>`;
@@ -656,15 +687,15 @@ function partII(R) {
   const sup = k => k === "interp" ? "<sup>и</sup>" : k === "extrap" ? "<sup>э</sup>" : "";
   const qs = [A, B].filter(E => E.ok).map(E => E.q);
   const sweep = II.sweep ? `<details><summary>Перебор ковшей<span>${II.nOk ? `подходят: ${II.nOk} из ${II.sweep.length}` : `ни один из ${II.sweep.length} не подходит`}</span></summary>
-    <p class="eq">Пэ мин — при Kн ${cm(K.kn1)}, Kр ${cm(K.kr2)}, Kв ${cm(K.kv1)}; Пэ макс — при Kн ${cm(K.kn2)}, Kр ${cm(K.kr1)}, Kв ${cm(K.kv2)}. Ковш подходит, если Пэ мин &lt; 1,5·Нвыр и Пэ макс ≥ Нвыр. «Kв допуст.» — наибольший Kв при самых невыгодных Kн и Kр. <sup>и</sup> интерполяция, <sup>э</sup> вне таблицы.</p>
+    <p class="eq">Пэ мин — при Kн ${cm(K.kn1)}, Kр ${cm(K.kr2)}, Kв ${cm(K.kv1)}; Пэ макс — при Kн ${cm(K.kn2)}, Kр ${cm(K.kr1)}, Kв ${cm(K.kv2)}. Ковш подходит, если при коэффициентах из диапазонов можно получить Пэ, при которой одновременно 1,5·Нвыр &gt; Пэ ≥ Нвыр и срок ${R.D ? `${fx(R.D[0])}–${fx(R.D[1])}` : ""} дней. «Nдн» — диапазон сроков от Пэ макс до Пэ мин. «Kв допуст.» — наибольший Kв при самых невыгодных Kн и Kр. <sup>и</sup> интерполяция, <sup>э</sup> вне таблицы.</p>
     <div class="sweep-in"><label for="in-q1">q от, м³<input id="in-q1" data-k="q1" value="${esc(S.q1)}" inputmode="decimal"></label><label for="in-q2">q до, м³<input id="in-q2" data-k="q2" value="${esc(S.q2)}" inputmode="decimal"></label><label for="in-dq">шаг, м³<input id="in-dq" data-k="dq" value="${esc(S.dq)}" inputmode="decimal"></label></div>
-    <div class="tbox"><table class="t"><thead><tr><th>q, м³</th><th>Тц, с</th><th>Нвр</th><th>Нвыр</th><th>1,5·Нвыр</th><th>Пэ мин</th><th>Пэ макс</th><th>Kв допуст.</th><th>Итог</th></tr></thead><tbody>
-    ${II.sweep.map(x => x.out ? `<tr><td>${fx(x.q, 2)}</td><td colspan="8" class="noc">вне таблицы — не считается</td></tr>` : `<tr class="${x.ok ? "yes" : ""}${qs.some(q => Math.abs(x.q - q) < EPS) ? " cur" : ""}"><td>${fx(x.q, 2)}</td><td>${fx(x.tc.v, 2)}${sup(x.tc.kind)}</td><td>${fx(x.nv.v, 3)}${sup(x.nv.kind)}</td><td>${fx(x.Nvyr, 1)}</td><td>${fx(x.lim, 1)}</td><td>${fx(x.Pmin, 1)}</td><td>${fx(x.Pmax, 1)}</td><td>≤ ${fx(x.KvAllow, 3)}</td><td class="${x.ok ? "okc" : "noc"}">${x.ok ? "подходит" : x.Pmin >= x.lim ? `+${fx((x.Pmin / x.lim - 1) * 100, 0)} %` : "нет"}</td></tr>`).join("")}
+    <div class="tbox"><table class="t"><thead><tr><th>q, м³</th><th>Тц, с</th><th>Нвр</th><th>Нвыр</th><th>1,5·Нвыр</th><th>Пэ мин</th><th>Пэ макс</th><th>Kв допуст.</th><th>Nдн</th><th>Итог</th></tr></thead><tbody>
+    ${II.sweep.map(x => x.out ? `<tr><td>${fx(x.q, 2)}</td><td colspan="9" class="noc">вне таблицы — не считается</td></tr>` : `<tr class="${x.ok ? "yes" : ""}${qs.some(q => Math.abs(x.q - q) < EPS) ? " cur" : ""}"><td>${fx(x.q, 2)}</td><td>${fx(x.tc.v, 2)}${sup(x.tc.kind)}</td><td>${fx(x.nv.v, 3)}${sup(x.nv.kind)}</td><td>${fx(x.Nvyr, 1)}</td><td>${fx(x.lim, 1)}</td><td>${fx(x.Pmin, 1)}</td><td>${fx(x.Pmax, 1)}</td><td>≤ ${fx(x.KvAllow, 3)}</td><td>${Number.isFinite(x.dMin) ? `${fx(x.dMin, 1)}–${fx(x.dMax, 1)}` : "—"}</td><td class="${x.ok ? "okc" : "noc"}">${x.ok ? "подходит" : !x.okP ? (x.Pmin >= x.lim ? `Пэ +${fx((x.Pmin / x.lim - 1) * 100, 0)} %` : "нет") : "нет по сроку"}</td></tr>`).join("")}
     </tbody></table></div></details>` : "";
   return `<section class="part"><div class="phead"><span class="roman">II</span><h2>Подбор экскаватора</h2></div>
     <div class="duo">${card(A)}${card(B)}</div>
     <h3 class="sub">Сравнение и выбор</h3>${cmp}<div class="notes">${verdict}</div>
-    <p class="eq" style="margin-top:8px">Правило выбора: сначала — выполняется ли условие 1,5·Нвыр &gt; Пэ ≥ Нвыр; затем — меньшая стоимость аренды на весь объём (Nсм·8 ч·ставка); если ставки не введены — меньше смен.</p>
+    <p class="eq" style="margin-top:8px">Правило выбора: сначала — у кого выполняется больше условий (1,5·Нвыр &gt; Пэ ≥ Нвыр и срок ${R.D ? `${fx(R.D[0])}–${fx(R.D[1])}` : "10–20"} дней); затем — меньшая стоимость аренды на весь объём (Nсм·8 ч·ставка); если ставки не введены — меньше смен.</p>
     ${sweep}</section>`;
 }
 function partIII(R) {
@@ -718,6 +749,7 @@ function verdict(R) {
     add(exs.every(E => E.name), "Указаны марки обоих экскаваторов (нужны для вывода)", "warn");
   }
   if (R.best) add(R.best.p.cond, `Условие 1,5·Нвыр > Пэ ≥ Нвыр для принятого экскаватора (${R.best.title})`);
+  if (R.best && R.best.daysOk !== undefined) add(R.best.daysOk, `Срок работы принятого экскаватора ${fx(R.D[0])}–${fx(R.D[1])} дней (Nдн = ${fx(R.best.Ndn, 2)})`);
   if (III.ok) {
     add(III.pickOk, `Загрузка самосвала в допусках: недогруз не более 10 %, перегруз не более 5 % (принято n = ${III.n}, ${fx(III.load * 100, 1)} %)`);
     const inR = (k) => st[k].ok && st[k].v >= RANGES[k][0] - EPS && st[k].v <= RANGES[k][1] + EPS;
@@ -784,6 +816,7 @@ function reportModel(R) {
     P("Потребная продолжительность работы:");
     Q(`Nсм = Vкотл/Пэ = ${n(I.V, 2)}/${n(p.P, 1)} = ${n(E.Nsm, 2)} смены`);
     if (Number.isFinite(E.Ndn)) Q(`Nдн = Nсм/n = ${n(E.Nsm, 2)}/${n(st.nsh.v, 0)} = ${n(E.Ndn, 2)} дня`);
+    if (E.daysOk !== undefined) P(E.daysOk ? `Проверка срока ${n(R.D[0])} ≤ Nдн ≤ ${n(R.D[1])}: ${n(R.D[0])} ≤ ${n(E.Ndn, 2)} ≤ ${n(R.D[1])} — условие выполняется.` : `Проверка срока ${n(R.D[0])} ≤ Nдн ≤ ${n(R.D[1])}: Nдн = ${n(E.Ndn, 2)} ${E.Ndn < R.D[0] ? "<" : ">"} ${n(E.Ndn < R.D[0] ? R.D[0] : R.D[1])} — условие не выполняется.`);
     if (Number.isFinite(E.cost)) Q(`Стоимость аренды: С = Nсм·T·Ц = ${n(E.Nsm, 4)}·8·${n(E.rent, 2)} = ${n(E.cost, 0)} руб.`);
   });
   if (R.E.a.ok && R.E.b.ok) {
@@ -795,6 +828,7 @@ function reportModel(R) {
       ["Нвыр … 1,5·Нвыр, м³/смену", `${n(A.p.Nvyr, 1)} … ${n(A.p.lim, 1)}`, `${n(B.p.Nvyr, 1)} … ${n(B.p.lim, 1)}`],
       ["Условие производительности", A.p.cond ? "выполняется" : "не выполняется", B.p.cond ? "выполняется" : "не выполняется"],
       ["Nсм / Nдн", `${n(A.Nsm, 2)} / ${n(A.Ndn, 2)}`, `${n(B.Nsm, 2)} / ${n(B.Ndn, 2)}`],
+      [`Срок ${R.D ? `${n(R.D[0])}–${n(R.D[1])}` : ""} дней`, A.daysOk === undefined ? "—" : A.daysOk ? "выполняется" : "не выполняется", B.daysOk === undefined ? "—" : B.daysOk ? "выполняется" : "не выполняется"],
       ["Аренда, руб./ч", Number.isFinite(A.rent) ? n(A.rent, 2) : "—", Number.isFinite(B.rent) ? n(B.rent, 2) : "—"],
       ["Стоимость аренды на весь объём, руб.", Number.isFinite(A.cost) ? n(A.cost, 0) : "—", Number.isFinite(B.cost) ? n(B.cost, 0) : "—"]]);
   }
