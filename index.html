@@ -327,6 +327,30 @@ function interp(pts, x, mode) {
   const [a, b] = lo ? [pts[0], pts[1]] : [pts[n - 2], pts[n - 1]];
   return { v: a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]), kind: "extrap", seg: [a, b] };
 }
+function bracket(list, x) {
+  const n = list.length;
+  for (let i = 0; i < n; i++) if (Math.abs(list[i] - x) < EPS) return [i];
+  if (x < list[0]) return [0];
+  if (x > list[n - 1]) return [n - 1];
+  let i = 0; while (list[i + 1] < x) i++;
+  return [i, i + 1];
+}
+function lookup6(t6, q, L) {
+  const qs = t6.qs, Ls = t6.rows.map(r => r[0]);
+  const ci = bracket(qs, q), ri = bracket(Ls, L);
+  const cell = (r, c) => { const v = t6.rows[r][1][c]; return v === undefined || v === null || isNaN(v) ? null : v; };
+  const byQ = r => {
+    if (ci.length === 1) return cell(r, ci[0]);
+    const a = cell(r, ci[0]), b = cell(r, ci[1]);
+    return a === null || b === null ? null : a + (b - a) * (q - qs[ci[0]]) / (qs[ci[1]] - qs[ci[0]]);
+  };
+  const rowVals = ri.map(byQ);
+  let v = null;
+  if (rowVals.every(x => x !== null)) v = ri.length === 1 ? rowVals[0] : rowVals[0] + (rowVals[1] - rowVals[0]) * (L - Ls[ri[0]]) / (Ls[ri[1]] - Ls[ri[0]]);
+  const exact = ci.length === 1 && ri.length === 1 && Math.abs(qs[ci[0]] - q) < EPS && Math.abs(Ls[ri[0]] - L) < EPS;
+  const out = q < qs[0] - EPS || q > qs[qs.length - 1] + EPS || L < Ls[0] - EPS || L > Ls[Ls.length - 1] + EPS;
+  return { v, exact, out, qCols: ci.map(i => qs[i]), LRows: ri.map(i => Ls[i]), rowVals, cells: ri.map(r => ci.map(c => cell(r, c))) };
+}
 function nextUp(list, x) {
   let best = null;
   list.forEach((v, i) => { if (v !== undefined && v + EPS >= x && (best === null || v < list[best])) best = i; });
@@ -481,13 +505,20 @@ function calc(S) {
   st.qcMode = { ok: true };
   const qT = E && E.p ? E.p.q : null;
   if (qT && st.L.ok && !tabErr.t6) {
-    const ci = nextUp(tb.t6.qs, qT), rows = tb.t6.rows.map(r => r[0]), ri = nextUp(rows, st.L.v);
-    III.lookup = { qCol: ci !== null ? tb.t6.qs[ci] : null, LRow: ri !== null ? rows[ri] : null };
-    III.QcTable = ci !== null && ri !== null ? tb.t6.rows[ri][1][ci] : null;
-    III.exact = ci !== null && ri !== null && Math.abs(tb.t6.qs[ci] - qT) < EPS && Math.abs(rows[ri] - st.L.v) < EPS;
+    III.lookup = lookup6(tb.t6, qT, st.L.v);
+    III.QcTable = III.lookup.v;
+    III.exact = III.lookup.exact;
     if (S.qcMode !== "Ввести вручную" && (III.QcTable === null || III.QcTable === undefined)) st.qcMode = { kind: "err", msg: "Для этих q и L в Таблице 6 нет значения — введите Qс вручную" };
   }
   III.Qc = S.qcMode === "Ввести вручную" ? (st.Qc.ok ? st.Qc.v : null) : III.QcTable;
+  st.tCap = String(S.tCap || "").trim() === "" ? { ok: true, empty: true } : pos(S.tCap, "Грузоподъёмность больше 0");
+  III.tName = String(S.tName || "").trim();
+  III.cap = st.tCap.ok && !st.tCap.empty ? st.tCap.v : null;
+  if (III.cap !== null && III.Qc) {
+    if (III.cap < III.Qc - EPS) Object.assign(st.tCap, { kind: "err", msg: `Меньше требуемой ${fx(III.Qc, 2)} т — так нельзя` });
+    else if (III.cap - III.Qc >= 1 - EPS) st.tCap.warn = `Больше требуемой на ${fx(III.cap - III.Qc, 2)} т — поищите модель ближе к ${fx(III.Qc, 2)} т`;
+    else st.tCap.hint = `Запас ${fx(III.cap - III.Qc, 2)} т над требуемой`;
+  } else if (III.Qc) st.tCap.hint = `Нужна модель не меньше ${fx(III.Qc, 2)} т, как можно ближе`;
   if (III.Qc && soil && E && E.ok && st.L.ok && st.vg.ok && st.vp.ok && st.tr.ok && st.tm.ok) {
     const mul = S.qFormula !== "С делением на Kр (как в Пэ)";
     III.mul = mul;
@@ -502,16 +533,16 @@ function calc(S) {
     if (S.nMode === "В меньшую сторону") pick = III.lo.n >= 1 ? III.lo : III.hi;
     else if (S.nMode === "В большую сторону") pick = III.hi;
     else {
-      const ok = [III.lo, III.hi].filter(x => x.ok && x.n >= 1);
-      const pool = ok.length ? ok : [III.lo, III.hi].filter(x => x.n >= 1);
-      pick = pool.slice().sort((a, b) => Math.abs(a.load - 1) - Math.abs(b.load - 1))[0];
+      if (III.hi.ok) pick = III.hi;
+      else if (III.lo.ok && III.lo.n >= 1) pick = III.lo;
+      else pick = [III.lo, III.hi].filter(x => x.n >= 1).sort((a, b) => Math.abs(a.load - 1) - Math.abs(b.load - 1))[0];
     }
     III.n = pick.n; III.load = pick.load; III.pickOk = pick.n === III.lo.n ? III.lo.ok : III.hi.ok;
     III.Vbody = III.Qkg * III.n / soil.rho;
     III.tp = III.Vbody * E.p.nv.v / 100 * 60;
     III.tg = 60 * st.L.v / st.vg.v; III.tb = 60 * st.L.v / st.vp.v;
     III.Tc = III.tp + III.tg + st.tr.v + III.tb + st.tm.v;
-    III.Nraw = III.Tc / III.tp; III.N = Math.max(1, Math.floor(r9(III.Nraw)));
+    III.Nraw = III.Tc / III.tp; III.N = Math.max(1, Math.ceil(r9(III.Nraw)));
     III.ok = true;
   }
   return R;
@@ -519,7 +550,7 @@ function calc(S) {
 
 const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", sgroup: "По Таблице 3", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
   Kn: "1,20", Kr: "1,25", Kv: "0,7", aName: "", aq: "0,65", aRent: "", bName: "", bq: "", bRent: "", nsh: "2", dmin: "10", dmax: "20", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
-  qcMode: "По Таблице 6", Qc: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
+  qcMode: "По Таблице 6", Qc: "", tName: "", tCap: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
   tcMode: MODE_EXT, nvMode: MODE_HOLD, q1: "0,25", q2: "2", dq: "0,05", tables: { ...TABLES_DEFAULT } };
 const clone = o => JSON.parse(JSON.stringify(o));
 const withEx = f => { const s = clone(EXAMPLE); f(s); return calc(s); };
@@ -545,7 +576,10 @@ const REFS = [
   ["Объём грунта в кузове 1755·3/1800", () => calc(EXAMPLE).III.Vbody, 2.925, "м³"],
   ["Время погрузки 2,925·2,6/100 ч = 4,563 мин", () => calc(EXAMPLE).III.tp, 4.563, "мин"],
   ["Цикл самосвала 4,563 + 1,5 + 1 + 1 + 2", () => calc(EXAMPLE).III.Tc, 10.063, "мин"],
-  ["Число самосвалов 10,063/4,563 = 2,21 → 2", () => calc(EXAMPLE).III.N, 2, "шт"],
+  ["Число самосвалов 10,063/4,563 = 2,21 → 3 (вверх)", () => calc(EXAMPLE).III.N, 3, "шт"],
+  ["Qс интерполяцией: q = 0,8, L = 0,5 → 4,5 + 2,5·0,15/0,35", () => withEx(s => Object.assign(s, { aq: "0,8" })).III.Qc, 4.5 + 2.5 * 0.15 / 0.35, "т"],
+  ["Qс интерполяцией по q и L: q = 0,5, L = 1,25 → 7", () => withEx(s => Object.assign(s, { aq: "0,5", L: "1,25" })).III.Qc, 7, "т"],
+  ["Qс интерполяцией: q = 0,45, L = 3 → 7 + 3·0,05/0,25 = 7,6", () => withEx(s => Object.assign(s, { aq: "0,45", L: "3" })).III.Qc, 7.6, "т"],
 ];
 function runRefs() { return REFS.map(([name, fn, exp, unit]) => { let got; try { got = fn(); } catch (e) { got = NaN; } return { name, exp, got, unit, ok: Number.isFinite(got) && Math.abs(got - exp) <= 1e-6 * Math.max(1, Math.abs(exp)) }; }); }
 /* ===================== /РАСЧЁТ ===================== */
@@ -614,6 +648,8 @@ function variantHtml(R) {
     ${field("truckFor", "Считать для", "", "", R, { select: ["Лучший из двух", "Экскаватор 1", "Экскаватор 2"], wide: true, hint: R.III.E ? `сейчас: ${R.III.E.title}` : "" })}
     ${field("qcMode", "Грузоподъёмность Qс", "", "", R, { select: ["По Таблице 6", "Ввести вручную"], wide: true })}
     ${field("Qc", "Qс вручную", "", "т", R, { dim: S.qcMode !== "Ввести вручную" })}
+    ${field("tName", "Принятый самосвал: марка, модель", "", "", R, { text: true, wide: true, placeholder: "например, КамАЗ-43255" })}
+    ${field("tCap", "Его грузоподъёмность", "", "т", R)}
     ${field("vg", "Скорость с грузом", "Vг", "км/ч", R)}
     ${field("vp", "Скорость порожняком", "Vп", "км/ч", R)}
     ${field("tr", "Время разгрузки", "tр", "мин", R)}
@@ -745,33 +781,46 @@ function partII(R) {
     <p class="eq" style="margin-top:8px">Правило выбора: сначала — у кого выполняется больше условий (1,5·Нвыр &gt; Пэ ≥ Нвыр и срок ${R.D ? `${fx(R.D[0])}–${fx(R.D[1])}` : "10–20"} дней); затем — меньшая стоимость аренды на весь объём (Nсм·8 ч·ставка); если ставки не введены — меньше смен.</p>
     ${sweep}</section>`;
 }
+function qcText(III, st, E) {
+  const lk = III.lookup, q = E.q, L = st.L.v;
+  if (III.exact) return `Табл. 6: q = ${cm(lk.qCols[0])} м³, Lср = ${cm(lk.LRows[0])} км`;
+  const parts = [];
+  lk.LRows.forEach((Lr, i) => {
+    const c = lk.cells[i];
+    if (lk.qCols.length === 2) parts.push(`при Lср = ${cm(Lr)} км: Qс = ${cm(c[0])} + (${cm(c[1])} − ${cm(c[0])})·(${cm(q)} − ${cm(lk.qCols[0])})/(${cm(lk.qCols[1])} − ${cm(lk.qCols[0])}) = ${fx(lk.rowVals[i], 3)} т`);
+    else parts.push(`при Lср = ${cm(Lr)} км, q = ${cm(lk.qCols[0])} м³: ${cm(c[0])} т`);
+  });
+  if (lk.LRows.length === 2) parts.push(`по Lср: ${fx(lk.rowVals[0], 3)} + (${fx(lk.rowVals[1], 3)} − ${fx(lk.rowVals[0], 3)})·(${cm(L)} − ${cm(lk.LRows[0])})/(${cm(lk.LRows[1])} − ${cm(lk.LRows[0])}) = ${fx(III.Qc, 3)} т`);
+  return "Табл. 6, интерполяция: " + parts.join("; ") + (lk.out ? " (вне таблицы — взято крайнее значение)" : "");
+}
 function partIII(R) {
   const III = R.III, st = R.st, lk = III.lookup;
   let body;
   const E = III.E;
   if (!III.ok) body = `<p class="eq">${E && E.ok ? "Заполните данные автосамосвала." : S.truckFor === "Лучший из двух" ? "Сначала нужен расчёт хотя бы одного экскаватора (раздел II)." : `Сначала рассчитайте ${S.truckFor.toLowerCase()} (раздел II).`}</p>`;
   else {
-    const qcSrc = S.qcMode === "Ввести вручную" ? "введено вручную" : III.exact ? `Табл. 6: q = ${cm(lk.qCol)} м³, Lср = ${cm(lk.LRow)} км` : `Табл. 6, ближайшие большие: столбец q = ${cm(lk.qCol)} м³, строка Lср = ${cm(lk.LRow)} км`;
+    const qcSrc = S.qcMode === "Ввести вручную" ? "введено вручную" : qcText(III, st, E);
     const opt = (o, title, cond) => `<div class="opt${o.n === III.n ? " sel" : ""}"><div class="top"><span>${title}</span><span class="pill ${o.n < 1 ? "muted" : o.ok ? "ok" : "err"}">${o.n < 1 ? "n = 0" : o.ok ? "допустимо" : "недопустимо"}</span></div>
-      <div class="big">n = ${o.n}</div><span class="eq">n·Q/Qс = ${o.n}·${fx(III.Qt, 3)}/${cm(III.Qc)} = <b>${fx(o.load, 3)}</b>, нужно ${cond}</span></div>`;
+      <div class="big">n = ${o.n}</div><span class="eq">n·Q/Qс = ${o.n}·${fx(III.Qt, 3)}/${fx(III.Qc, 3)} = <b>${fx(o.load, 3)}</b>, нужно ${cond}</span></div>`;
     body = `<ol class="steps" id="txt-III">
       <li><div>Экскаватор: <b>${esc(E.title)}</b>, q = ${cm(E.q)} м³<span class="eq">${S.truckFor === "Лучший из двух" ? "выбран как лучший в разделе II" : "выбран вручную"}</span></div></li>
-      <li><div>Грузоподъёмность автосамосвала: Qс = <span class="res">${cm(III.Qc)} т</span><span class="eq">${esc(qcSrc)}</span></div></li>
+      <li><div>Минимальная грузоподъёмность автосамосвала: Qс = <span class="res">${fx(III.Qc, 3)} т</span><span class="eq">${esc(qcSrc)}</span></div></li>
       <li><div>Масса грунта в ковше: Q = q·Kн·${III.mul ? "Kр" : "(1/Kр)"}·ρ = ${cm(E.q)}·${cm(E.Kn)}·${III.mul ? cm(E.Kr) : `(1/${cm(E.Kr)})`}·${fx(R.soil.rho)} = <span class="res">${fx(III.Qkg, 1)} кг</span><span class="eq">= ${fx(III.Qt, 3)} т</span></div></li>
-      <li><div>Количество ковшей в кузове: n = Qс/Q = ${cm(III.Qc)}/${fx(III.Qt, 3)} = ${fx(III.nRaw, 3)} → принято <span class="res">n = ${III.n}</span><span class="eq">загрузка ${fx(III.load * 100, 1)} %; допустимо: недогруз до 10 % (≥ 0,9), перегруз до 5 % (≤ 1,05)</span></div></li>
+      <li><div>Количество ковшей в кузове: n = Qс/Q = ${fx(III.Qc, 3)}/${fx(III.Qt, 3)} = ${fx(III.nRaw, 1)} → принято <span class="res">n = ${III.n}</span><span class="eq">загрузка ${fx(III.load * 100, 1)} %; допустимо: недогруз до 10 % (≥ 0,9), перегруз до 5 % (≤ 1,05)${III.lo.ok && III.hi.ok ? "; подходят оба — берём перегруз" : ""}</span></div></li>
       <li><div>Объём грунта в кузове: V = Q·n/ρ = ${fx(III.Qkg, 1)}·${III.n}/${fx(R.soil.rho)} = <span class="res">${fx(III.Vbody, 3)} м³</span></div></li>
       <li><div>Время погрузки: tп = V·Нвр/100 = ${fx(III.Vbody, 3)}·${fx(E.p.nv.v, 4)}/100 = ${fx(III.Vbody * E.p.nv.v / 100, 5)} маш-ч = <span class="res">${fx(III.tp, 3)} мин</span></div></li>
       <li><div>Цикл автосамосвала: Тц = tп + 60·L/Vг + tр + 60·L/Vп + tм
         <span class="eq">= ${fx(III.tp, 3)} + 60·${cm(st.L.v)}/${cm(st.vg.v)} + ${cm(st.tr.v)} + 60·${cm(st.L.v)}/${cm(st.vp.v)} + ${cm(st.tm.v)}</span>
         <span class="eq">= ${fx(III.tp, 3)} + ${fx(III.tg, 3)} + ${cm(st.tr.v)} + ${fx(III.tb, 3)} + ${cm(st.tm.v)} = <b>${fx(III.Tc, 3)} мин</b></span></div></li>
-      <li><div>Требуемое количество автосамосвалов: N = Тц/tп = ${fx(III.Tc, 3)}/${fx(III.tp, 3)} = ${fx(III.Nraw, 3)} → <span class="res">N = ${III.N}</span><span class="eq">округление до ближайшего меньшего целого (по методичке)</span></div></li>
+      <li><div>Требуемое количество автосамосвалов: N = Тц/tп = ${fx(III.Tc, 3)}/${fx(III.tp, 3)} = ${fx(III.Nraw, 3)} → <span class="res">N = ${III.N}</span><span class="eq">округление в большую сторону: экскаватор не должен простаивать в ожидании самосвала</span></div></li>
+      <li><div>Принятый автосамосвал: ${III.tName ? `<b>${esc(III.tName)}</b>` : "<i>не указан</i>"}${III.cap !== null ? `, грузоподъёмность <span class="res">${cm(III.cap)} т</span>` : ""}<span class="eq">грузоподъёмность не меньше ${fx(III.Qc, 2)} т и как можно ближе к ней</span></div></li>
     </ol>
     <h3 style="font-size:14px;margin:18px 0 4px">Проверка загрузки кузова</h3>
     <div class="choice">${opt(III.lo, "В меньшую сторону", "≥ 0,9")}${opt(III.hi, "В большую сторону", "≤ 1,05")}</div>`;
   }
   const notes = [];
   if (st.qcMode.kind) notes.push(note("err", "Таблица 6", esc(st.qcMode.msg)));
-  if (III.ok && !III.exact && S.qcMode !== "Ввести вручную") notes.push(note("info", "Таблица 6", "Вашего q или Lср нет в таблице. Грузоподъёмность — это конкретные модели машин, поэтому интерполяция здесь не применяется: взяты ближайший больший столбец и строка. Можно ввести Qс вручную."));
+  if (III.ok && !III.exact && S.qcMode !== "Ввести вручную") notes.push(note("info", "Таблица 6", "Вашего q или Lср нет в таблице — минимальная грузоподъёмность найдена интерполяцией. Подберите реальный самосвал с грузоподъёмностью не меньше этой и как можно ближе к ней."));
   if (III.ok && !III.pickOk) notes.push(note("warn", "Загрузка кузова", `Ни одно целое n не укладывается в допуски методички. Принято n = ${III.n} — ближе всего к полной загрузке.${III.mul ? " В методичке Q = q·Kн·Kр·ρ, а в формуле Пэ Kр стоит в знаменателе. Если преподаватель имел в виду деление на Kр, переключите формулу в «Дополнительно» и сравните." : ""}`));
   return `<section class="part"><div class="phead"><span class="roman">III</span><h2>Количество автосамосвалов</h2>${III.ok ? `<button class="copy" data-copy="txt-III" type="button">Скопировать</button>` : ""}</div>
     ${body}${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}</section>`;
@@ -801,6 +850,11 @@ function verdict(R) {
     add(III.pickOk, `Загрузка самосвала в допусках: недогруз не более 10 %, перегруз не более 5 % (принято n = ${III.n}, ${fx(III.load * 100, 1)} %)`);
     const inR = (k) => st[k].ok && st[k].v >= RANGES[k][0] - EPS && st[k].v <= RANGES[k][1] + EPS;
     add(inR("vg") && inR("vp") && inR("tr") && inR("tm"), "Vг, Vп, tр, tм в диапазонах методички");
+    add(!!III.tName && III.cap !== null, "Указан реальный автосамосвал: марка и грузоподъёмность", "warn");
+    if (III.cap !== null) {
+      add(III.cap >= III.Qc - EPS, `Грузоподъёмность самосвала ${fx(III.cap)} т не меньше требуемой ${fx(III.Qc, 2)} т`);
+      if (III.cap >= III.Qc - EPS) add(III.cap - III.Qc < 1 - EPS, `Самосвал близок к требуемой грузоподъёмности (запас ${fx(III.cap - III.Qc, 2)} т, меньше 1 т)`, "warn");
+    }
   }
   const fails = checks.filter(c => c.level === "fail"), miss = checks.filter(c => c.level === "miss"), warns = checks.filter(c => c.level === "warn");
   let status, text;
@@ -890,21 +944,24 @@ function reportModel(R) {
   if (III.ok) {
     const E = III.E;
     P(`Расчёт выполнен для экскаватора: ${E.title}, q = ${n(E.q)} м³.`);
-    P(S.qcMode === "Ввести вручную" ? `1) Грузоподъёмность автосамосвала принята Qс = ${n(III.Qc)} т.` : `1) По Таблице 6 при Lср = ${n(st.L.v)} км и ёмкости ковша ${n(III.lookup.qCol)} м³ грузоподъёмность автосамосвала Qс = ${n(III.Qc)} т${III.exact ? "" : " (ближайшие большие значения таблицы)"}.`);
+    if (S.qcMode === "Ввести вручную") P(`1) Минимальная грузоподъёмность автосамосвала принята Qс = ${n(III.Qc)} т.`);
+    else if (III.exact) P(`1) По Таблице 6 при Lср = ${n(st.L.v)} км и ёмкости ковша ${n(E.q)} м³ минимальная грузоподъёмность автосамосвала Qс = ${n(III.Qc)} т.`);
+    else { P(`1) Минимальная грузоподъёмность автосамосвала по Таблице 6 (Lср = ${n(st.L.v)} км, q = ${n(E.q)} м³) — интерполяцией:`); Q(qcText(III, st, E).replace("Табл. 6, интерполяция: ", "")); }
     P("2) Масса грунта в ковше экскаватора:");
     Q(III.mul ? `Q = q·Kн·Kр·ρ = ${n(E.q)}·${n(E.Kn)}·${n(E.Kr)}·${n(R.soil.rho, 0)} = ${n(III.Qkg, 1)} кг = ${n(III.Qt, 3)} т` : `Q = q·Kн·(1/Kр)·ρ = ${n(E.q)}·${n(E.Kn)}·(1/${n(E.Kr)})·${n(R.soil.rho, 0)} = ${n(III.Qkg, 1)} кг = ${n(III.Qt, 3)} т`);
     P("3) Количество ковшей грунта, загружаемых в кузов:");
-    Q(`n = Qс/Q = ${n(III.Qc)}/${n(III.Qt, 3)} = ${n(III.nRaw, 3)}`);
-    Q(`при округлении в меньшую сторону n = ${III.lo.n}: n·Q/Qс = ${III.lo.n}·${n(III.Qt, 3)}/${n(III.Qc)} = ${n(III.lo.load, 3)} ${III.lo.ok ? "≥ 0,9 — недогруз допустим" : "< 0,9 — недогруз больше 10 %"}`);
-    Q(`при округлении в большую сторону n = ${III.hi.n}: n·Q/Qс = ${III.hi.n}·${n(III.Qt, 3)}/${n(III.Qc)} = ${n(III.hi.load, 3)} ${III.hi.ok ? "≤ 1,05 — перегруз допустим" : "> 1,05 — перегруз больше 5 %"}`);
-    P(`Принимаем n = ${III.n}${III.pickOk ? "." : " — ближайшее к полной загрузке (допуски методички не выполняются)."}`);
+    Q(`n = Qс/Q = ${n(III.Qc, 3)}/${n(III.Qt, 3)} = ${n(III.nRaw, 1)}`);
+    Q(`при округлении в меньшую сторону n = ${III.lo.n}: n·Q/Qс = ${III.lo.n}·${n(III.Qt, 3)}/${n(III.Qc, 3)} = ${n(III.lo.load, 3)} ${III.lo.ok ? "≥ 0,9 — недогруз допустим" : "< 0,9 — недогруз больше 10 %"}`);
+    Q(`при округлении в большую сторону n = ${III.hi.n}: n·Q/Qс = ${III.hi.n}·${n(III.Qt, 3)}/${n(III.Qc, 3)} = ${n(III.hi.load, 3)} ${III.hi.ok ? "≤ 1,05 — перегруз допустим" : "> 1,05 — перегруз больше 5 %"}`);
+    P(`Принимаем n = ${III.n}${III.pickOk ? (III.lo.ok && III.hi.ok ? " (допустимы оба варианта — принимаем с перегрузом)." : ".") : " — ближайшее к полной загрузке (допуски методички не выполняются)."}`);
     P("4) Объём грунта в кузове автосамосвала:");
     Q(`V = Q·n/ρ = ${n(III.Qkg, 1)}·${III.n}/${n(R.soil.rho, 0)} = ${n(III.Vbody, 3)} м³`);
     P("5) Продолжительность цикла автосамосвала. Время погрузки:");
     Q(`tп = V·Нвр/100 = ${n(III.Vbody, 3)}·${n(E.p.nv.v, 4)}/100 = ${n(III.Vbody * E.p.nv.v / 100, 5)} маш-ч = ${n(III.tp, 3)} мин`);
     Q(`Тц = tп + 60·L/Vг + tр + 60·L/Vп + tм = ${n(III.tp, 3)} + 60·${n(st.L.v)}/${n(st.vg.v)} + ${n(st.tr.v)} + 60·${n(st.L.v)}/${n(st.vp.v)} + ${n(st.tm.v)} = ${n(III.tp, 3)} + ${n(III.tg, 3)} + ${n(st.tr.v)} + ${n(III.tb, 3)} + ${n(st.tm.v)} = ${n(III.Tc, 3)} мин`);
     P("6) Требуемое количество автосамосвалов:");
-    Q(`N = Тц/tп = ${n(III.Tc, 3)}/${n(III.tp, 3)} = ${n(III.Nraw, 3)} ≈ ${III.N} шт. (округление до ближайшего меньшего целого)`);
+    Q(`N = Тц/tп = ${n(III.Tc, 3)}/${n(III.tp, 3)} = ${n(III.Nraw, 3)} → ${III.N} шт. (округление в большую сторону, чтобы экскаватор не простаивал)`);
+    P(III.tName || III.cap !== null ? `Принимаем автосамосвал ${III.tName || "—"}${III.cap !== null ? ` грузоподъёмностью ${n(III.cap)} т (не меньше требуемой ${n(III.Qc, 2)} т)` : ""}, количество — ${III.N} шт.` : `Принимаем автосамосвал грузоподъёмностью не менее ${n(III.Qc, 2)} т (марку укажите), количество — ${III.N} шт.`);
   } else P("Недостаточно данных.");
 
   const V = verdict(R);
