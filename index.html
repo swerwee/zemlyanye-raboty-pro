@@ -354,7 +354,11 @@ function calc(S) {
   const D = st.dmin.ok && st.dmax.ok ? [st.dmin.v, st.dmax.v] : null; R.D = D;
   st.vg = pos(S.vg); st.vp = pos(S.vp); st.tr = nonneg(S.tr); st.tm = nonneg(S.tm);
   st.Qc = S.qcMode === "Ввести вручную" ? pos(S.Qc, "Грузоподъёмность больше 0") : { ok: true, unused: true };
-  R.soil = soil;
+  const gOver = /^(I|II|III)$/.test(S.sgroup || "") ? S.sgroup : null;
+  st.sgroup = { ok: true };
+  R.soil = soil ? { ...soil, group: gOver || soil.group, group0: soil.group, gOver: !!gOver && gOver !== soil.group } : soil;
+  if (R.soil && R.soil.gOver) st.sgroup.warn = `По Таблице 3 у этого грунта ${soil.group} группа — принята ${gOver} (согласуйте с преподавателем)`;
+  else if (R.soil) st.sgroup.hint = `По Таблице 3: ${soil.group} группа`;
   const rng = (k, r, src) => { if (!st[k].ok) { st[k].range = `${src}: ${fx(r[0])}–${fx(r[1])}`; return; } if (st[k].v < r[0] - EPS || st[k].v > r[1] + EPS) st[k].warn = `Вне диапазона (${src}): ${fx(r[0])}–${fx(r[1])}`; else st[k].hint = `${src}: ${fx(r[0])}–${fx(r[1])}`; };
   if (soil) { rng("Kn", soil.kn, "Табл. 3"); rng("Kr", soil.kr, "Табл. 3"); }
   rng("Kv", RANGES.Kv, "методичка"); rng("vg", RANGES.vg, "методичка"); rng("vp", RANGES.vp, "методичка");
@@ -378,7 +382,7 @@ function calc(S) {
   }
 
   const II = R.II = {};
-  const tcPts = tb.t4[S.angle] || [], nvPts = soil ? tb.t5[soil.group] : [];
+  const tcPts = tb.t4[S.angle] || [], nvPts = R.soil ? tb.t5[R.soil.group] : [];
   const point = q => {
     const tc = interp(tcPts, q, S.tcMode), nv = interp(nvPts, q, S.nvMode), o = { q, tc, nv };
     if (tc.v === null || nv.v === null) { o.out = true; return o; }
@@ -513,7 +517,7 @@ function calc(S) {
   return R;
 }
 
-const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
+const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", sgroup: "По Таблице 3", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
   Kn: "1,20", Kr: "1,25", Kv: "0,7", aName: "", aq: "0,65", aRent: "", bName: "", bq: "", bRent: "", nsh: "2", dmin: "10", dmax: "20", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
   qcMode: "По Таблице 6", Qc: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
   tcMode: MODE_EXT, nvMode: MODE_HOLD, q1: "0,25", q2: "2", dq: "0,05", tables: { ...TABLES_DEFAULT } };
@@ -587,7 +591,8 @@ function pickHtml() {
 function variantHtml(R) {
   return `<div class="vhead"><h2>Исходные данные</h2><span>сохраняются в браузере</span></div>
   <div class="group"><h3>Вариант задания${curVar() ? ` · В.${+S.variant + 1}` : ""}</h3>
-    ${field("soil", "Грунт (Таблица 3)", "", "", R, { select: ["", ...R.tb.soils.map(x => x.name)], wide: true, hint: R.soil ? `${R.soil.group} группа · средняя плотность ${fx(R.soil.rho)} кг/м³` : "" })}
+    ${field("soil", "Грунт (Таблица 3)", "", "", R, { select: ["", ...R.tb.soils.map(x => x.name)], wide: true, hint: R.soil ? `${R.soil.group0} группа по Табл. 3 · средняя плотность ${fx(R.soil.rho)} кг/м³` : "" })}
+    ${field("sgroup", "Группа грунта для Таблицы 5 (Нвр)", "", "", R, { select: ["По Таблице 3", "I", "II", "III"], wide: true })}
     ${field("c", "Ширина по дну", "c", "м", R, { hint: fromVar("c") })}
     ${field("d", "Длина по дну", "d", "м", R, { hint: fromVar("d") })}
     ${field("H", "Глубина", "H", "м", R, { hint: fromVar("H") })}
@@ -819,7 +824,7 @@ function reportModel(R) {
   P(v ? `Группа ${S.group}, вариант В.${+S.variant + 1} - ${v.short}.` : "Исходные данные введены вручную.");
   H("Исходные данные");
   T([["Параметр", "Значение"],
-    ["Грунт (Таблица 3)", R.soil ? `${R.soil.name}, ${R.soil.group} группа` : "—"],
+    ["Грунт (Таблица 3)", R.soil ? `${R.soil.name}, ${R.soil.group} группа${R.soil.gOver ? ` (по Таблице 3 — ${R.soil.group0}, группа принята по согласованию с преподавателем)` : ""}` : "—"],
     ["Средняя плотность грунта ρ", R.soil ? `${n(R.soil.rho, 0)} кг/м³` : "—"],
     ["Размеры котлована по дну c × d", st.c.ok && st.d.ok ? `${n(st.c.v)} × ${n(st.d.v)} м` : "—"],
     ["Глубина котлована H", st.H.ok ? `${n(st.H.v)} м` : "—"],
@@ -852,7 +857,7 @@ function reportModel(R) {
     if (!E.ok) { P("Недостаточно данных."); return; }
     const p = E.p;
     Q(interpLine(p.tc, "Тц", p.q, "с", "Таблица 4"));
-    Q(interpLine(p.nv, "Нвр", p.q, "маш-ч", "Таблица 5"));
+    Q(interpLine(p.nv, "Нвр", p.q, "маш-ч", `Таблица 5, ${R.soil.group} группа`));
     P("Эксплуатационная производительность:");
     Q(`Пэ = 3600·T/Тц·q·Kн·(1/Kр)·Kв = 3600·8/${n(p.tc.v, 4)}·${n(p.q)}·${n(E.Kn)}·(1/${n(E.Kr)})·${n(E.Kv)} = ${n(p.P, 1)} м³/смену`);
     P("Норма выработки:");
@@ -1030,8 +1035,8 @@ function render() {
   const ae = document.activeElement, fid = ae && ae.id, sel = ae && ae.selectionStart;
   const open = [...document.querySelectorAll("#report details")].map(d => d.open);
   $("pick").innerHTML = pickHtml();
-  $("in-group").onchange = e => { S.group = e.target.value; S.variant = ""; ["soil", "c", "d", "H", "L"].forEach(k => S[k] = ""); save(); render(); };
-  $("in-variant").onchange = e => { S.variant = e.target.value; const v = curVar(); if (v) { S.c = v.c; S.d = v.d; S.H = v.H; S.L = v.L; S.soil = v.soil; } save(); render(); };
+  $("in-group").onchange = e => { S.group = e.target.value; S.variant = ""; ["soil", "c", "d", "H", "L"].forEach(k => S[k] = ""); S.sgroup = "По Таблице 3"; save(); render(); };
+  $("in-variant").onchange = e => { S.variant = e.target.value; const v = curVar(); if (v) { S.c = v.c; S.d = v.d; S.H = v.H; S.L = v.L; S.soil = v.soil; S.sgroup = "По Таблице 3"; } save(); render(); };
   $("variant").innerHTML = variantHtml(R);
   $("report").innerHTML = ticket(R) + partI(R) + partFit(R) + partII(R) + partIII(R) + partFinal(R) + partTables(R) +
     `<p class="foot">Формулы и таблицы — по методичке курсовой «Технология производства земляных работ». Ввод хранится только в этом браузере.</p>`;
