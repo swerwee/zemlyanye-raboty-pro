@@ -409,7 +409,7 @@ function calc(S) {
   const tcPts = tb.t4[S.angle] || [], nvPts = R.soil ? tb.t5[R.soil.group] : [];
   const point = q => {
     const tc = interp(tcPts, q, S.tcMode), nv = interp(nvPts, q, S.nvMode), o = { q, tc, nv };
-    if (tc.v === null || nv.v === null) { o.out = true; return o; }
+    if (tc.v === null || nv.v === null || nv.v <= EPS || tc.v <= EPS) { o.out = true; return o; }
     o.base = 3600 * T_SHIFT / tc.v * q; o.Nvyr = 100 * T_SHIFT / nv.v; o.lim = 1.5 * o.Nvyr; return o;
   };
   const tablesOk = soil && st.angle.ok && !tabErr.t4 && !tabErr.t5;
@@ -489,12 +489,13 @@ function calc(S) {
         p.okTab = p.tc.kind !== "extrap" && p.nv.kind !== "extrap";
         p.okT2 = I.rec ? p.q >= I.rec[2] - EPS && p.q <= I.rec[3] + EPS : true;
         p.fit = !!(p.ok && p.okT2);
-        if (p.fit && D && I.ok && st.nsh.ok) {
+        if (p.ok && D && I.ok && st.nsh.ok) {
           p.Plo = Math.max(p.Pmin, p.Nvyr, I.V / (D[1] * st.nsh.v)); p.Phi = Math.min(p.Pmax, p.lim, I.V / (D[0] * st.nsh.v));
           if (k) { const lo = Math.max(p.Plo / (p.base * k), RANGES.Kv[0]), hi = Math.min(p.Phi / (p.base * k), RANGES.Kv[1]); p.KvFit = lo <= hi + EPS ? [lo, hi] : null; }
         }
       });
       II.fits = II.sweep.filter(x => x.fit);
+      II.fitsOut = II.sweep.filter(x => !x.out && x.ok && !x.okT2);
       const pool = II.sweep.filter(x => !x.out && x.okT2);
       II.why = { n: pool.length, p: pool.filter(x => !x.okP).length, d: pool.filter(x => x.okD === false).length, both: pool.filter(x => x.okP && x.okD !== false && !x.ok).length };
     }
@@ -551,7 +552,7 @@ function calc(S) {
 const EXAMPLE = { soil: "Глина жирная мягкая и мягкая без примесей", sgroup: "По Таблице 3", c: "24", d: "170", H: "2,9", angle: "135", L: "0,5", mMode: "По Таблице 1", mManual: "",
   Kn: "1,20", Kr: "1,25", Kv: "0,7", aName: "", aq: "0,65", aRent: "", bName: "", bq: "", bRent: "", nsh: "2", dmin: "10", dmax: "20", truckFor: "Лучший из двух", vg: "20", vp: "30", tr: "1", tm: "2",
   qcMode: "По Таблице 6", Qc: "", tName: "", tCap: "", nMode: "Автоматически", qFormula: "Как в методичке: q·Kн·Kр·ρ",
-  tcMode: MODE_EXT, nvMode: MODE_HOLD, q1: "0,25", q2: "2", dq: "0,05", tables: { ...TABLES_DEFAULT } };
+  tcMode: MODE_EXT, nvMode: MODE_EXT, q1: "0,25", q2: "2,5", dq: "0,05", tables: { ...TABLES_DEFAULT } };
 const clone = o => JSON.parse(JSON.stringify(o));
 const withEx = f => { const s = clone(EXAMPLE); f(s); return calc(s); };
 /* Эталоны посчитаны вручную по формулам методички */
@@ -726,6 +727,7 @@ function excSteps(R, E) {
     ${Number.isFinite(E.cost) ? `<li><div>Аренда на весь объём: Nсм·T·ставка = ${fx(E.Nsm, 4)}·${T_SHIFT}·${fx(E.rent, 2)} = <span class="res">${fx(E.cost, 0)} ₽</span></div></li>` : ""}
   </ol>${notes.length ? `<div class="notes">${notes.join("")}</div>` : ""}`;
 }
+const fitCard = x => `<div class="fit${x.okTab ? "" : " ext"}"><b>${fx(x.q, 2)} м³</b>${x.okTab ? "" : `<span class="extn">Тц или Нвр вне Таблиц 4–5 — согласуйте</span>`}<span>Пэ ${fx(x.Plo, 0)}–${fx(x.Phi, 0)} м³/смену</span>${x.KvFit !== undefined ? `<span>${x.KvFit ? `при ваших Kн, Kр: Kв ${fx(x.KvFit[0], 2)}–${fx(x.KvFit[1], 2)}` : "при ваших Kн, Kр не подходит"}</span>` : ""}</div>`;
 function partFit(R) {
   const II = R.II, I = R.I;
   if (!II.sweep || !I.ok) return `<section class="part"><div class="phead"><span class="roman">q</span><h2>Подходящие объёмы ковша</h2></div><p class="eq">Появятся после выбора варианта (нужны грунт, размеры котлована и глубина).</p></section>`;
@@ -733,7 +735,7 @@ function partFit(R) {
   const conds = `Проверены ковши от ${fx(num(S.q1).v)} до ${fx(num(S.q2).v)} м³ с шагом ${fx(num(S.dq).v)} м³ (меняется в переборе раздела II). Условия: ковш по Таблице 2 ${I.rec ? `(${fx(I.rec[2])}–${fx(I.rec[3])} м³)` : ""}; 1,5·Нвыр &gt; Пэ ≥ Нвыр при Kн ${fx(K.kn1)}–${fx(K.kn2)}, Kр ${fx(K.kr1)}–${fx(K.kr2)}, Kв 0,7–0,9; срок ${D ? `${fx(D[0])}–${fx(D[1])}` : "—"} дней.`;
   let body;
   if (II.fits.length) {
-    body = `<div class="fits">${II.fits.map(x => `<div class="fit${x.okTab ? "" : " ext"}"><b>${fx(x.q, 2)} м³</b>${x.okTab ? "" : `<span class="extn">Тц или Нвр вне Таблиц 4–5 — согласуйте</span>`}<span>Пэ ${fx(x.Plo, 0)}–${fx(x.Phi, 0)} м³/смену</span>${x.KvFit !== undefined ? `<span>${x.KvFit ? `при ваших Kн, Kр: Kв ${fx(x.KvFit[0], 2)}–${fx(x.KvFit[1], 2)}` : "при ваших Kн, Kр не подходит"}</span>` : ""}</div>`).join("")}</div>
+    body = `<div class="fits">${II.fits.map(fitCard).join("")}</div>
       <p class="eq" style="margin-top:8px">Подходят: ${II.fits.map(x => fx(x.q, 2)).join("; ")} м³. Пэ — диапазон, при котором выполняются оба условия.${II.fits.some(x => !x.okTab) ? " Для отмеченных оранжевым ковшей значения Тц или Нвр получены за пределами таблиц методички." : ""}</p>`;
   } else {
     const r = [];
@@ -743,9 +745,12 @@ function partFit(R) {
       if (w.d) r.push(`срок ${D ? `${fx(D[0])}–${fx(D[1])}` : ""} дней невыполним у ${w.d} из ${w.n}`);
       if (w.both) r.push(`у ${w.both} из ${w.n} условия по отдельности выполнимы, но не одновременно`);
     }
-    body = note("warn", "Результат", `Ни один объём ковша не подходит. ${r.length ? "Среди ковшей по Таблице 2: " + r.join("; ") + "." : ""}`);
+    body = note("warn", "Результат", `${II.fitsOut && II.fitsOut.length ? "В диапазоне Таблицы 2 ни один объём ковша не подходит (подходящие вне диапазона — ниже)." : "Ни один объём ковша не подходит."} ${r.length ? "Среди ковшей по Таблице 2: " + r.join("; ") + "." : ""}`);
   }
-  return `<section class="part"><div class="phead"><span class="roman">q</span><h2>Подходящие объёмы ковша</h2>${II.fits.length ? `<span class="pill ok">подходят: ${II.fits.length}</span>` : '<span class="pill warn">не подходит ни один</span>'}</div>
+  if (II.fitsOut && II.fitsOut.length) body += `<h3 style="font-size:14px;margin:16px 0 4px">Вне Таблицы 2 — по согласованию с преподавателем</h3>
+    <p class="eq" style="margin-bottom:8px">Эти ковши выходят за рекомендуемый диапазон Таблицы 2${I.rec ? ` (${fx(I.rec[2])}–${fx(I.rec[3])} м³)` : ""}, но условие производительности и срок выполняются. Преподаватель такие ковши принимает, если расчёт выполнен.</p>
+    <div class="fits">${II.fitsOut.map(fitCard).join("")}</div>`;
+  return `<section class="part"><div class="phead"><span class="roman">q</span><h2>Подходящие объёмы ковша</h2>${II.fits.length ? `<span class="pill ok">подходят: ${II.fits.length}</span>` : II.fitsOut && II.fitsOut.length ? `<span class="pill warn">только вне Табл. 2: ${II.fitsOut.length}</span>` : '<span class="pill warn">не подходит ни один</span>'}</div>
     <p class="eq" style="margin-bottom:10px">${conds}</p>${body}</section>`;
 }
 function partII(R) {
@@ -840,8 +845,8 @@ function verdict(R) {
     const inRange = (k, r) => st[k].ok && st[k].v >= r[0] - EPS && st[k].v <= r[1] + EPS;
     add(R.soil && inRange("Kn", R.soil.kn) && inRange("Kr", R.soil.kr), `Kн и Kр в диапазонах Таблицы 3 (${fx(R.soil ? R.soil.kn[0] : NaN)}–${fx(R.soil ? R.soil.kn[1] : NaN)} и ${fx(R.soil ? R.soil.kr[0] : NaN)}–${fx(R.soil ? R.soil.kr[1] : NaN)})`);
     add(inRange("Kv", RANGES.Kv), "Kв в диапазоне методички 0,7–0,9");
-    add(exs.every(E => E.recOk !== false), "Ёмкость ковшей соответствует Таблице 2 для объёма котлована");
-    add(exs.every(E => E.p.tc.kind !== "extrap" && E.p.nv.kind !== "extrap"), "Тц и Нвр взяты из таблиц или интерполяцией, без выхода за таблицы");
+    add(exs.every(E => E.recOk !== false), "Ёмкость ковшей в диапазоне Таблицы 2 (вне диапазона допускается по согласованию с преподавателем)", "warn");
+    add(exs.every(E => E.p.tc.kind !== "extrap" && E.p.nv.kind !== "extrap"), "Тц и Нвр из таблиц или интерполяцией (продление таблиц допускается по согласованию с преподавателем)", "warn");
     add(exs.every(E => E.name), "Указаны марки обоих экскаваторов (нужны для вывода)", "warn");
   }
   if (R.best) add(R.best.p.cond, `Условие 1,5·Нвыр > Пэ ≥ Нвыр для принятого экскаватора (${R.best.title})`);
@@ -903,6 +908,7 @@ function reportModel(R) {
   if (R.II.sweep && I.ok) {
     P(R.II.fits.length ? `Подходящие объёмы ковша (выполняются Таблица 2, условие 1,5·Нвыр > Пэ ≥ Нвыр при коэффициентах из диапазонов методички и срок ${R.D ? `${n(R.D[0])}–${n(R.D[1])}` : ""} дней): ${R.II.fits.map(x => n(x.q, 2)).join("; ")} м³.`
       : `Проверка объёмов ковша от ${n(num(S.q1).v)} до ${n(num(S.q2).v)} м³: ни один объём не удовлетворяет одновременно Таблице 2, условию 1,5·Нвыр > Пэ ≥ Нвыр при коэффициентах из диапазонов методички и сроку ${R.D ? `${n(R.D[0])}–${n(R.D[1])}` : ""} дней.`);
+    if (R.II.fitsOut && R.II.fitsOut.length) P(`Вне диапазона Таблицы 2 (по согласованию с преподавателем) условие производительности и срок выполняются для ковшей: ${R.II.fitsOut.map(x => n(x.q, 2)).join("; ")} м³.`);
   }
   H("II. Подбор экскаватора");
   ["a", "b"].forEach(x => {
